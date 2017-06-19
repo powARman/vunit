@@ -4,7 +4,7 @@
 -- License, v. 2.0. If a copy of the MPL was not distributed with this file,
 -- You can obtain one at http://mozilla.org/MPL/2.0/.
 --
--- Copyright (c) 2015, Lars Asplund lars.anders.asplund@gmail.com
+-- Copyright (c) 2015-2017, Lars Asplund lars.anders.asplund@gmail.com
 
 library vunit_lib;
 context vunit_lib.vunit_context;
@@ -27,9 +27,8 @@ end entity scoreboard;
 architecture behavioral of scoreboard is
 begin
   main : process is
-    variable self, requesting_actor               : actor_t;
-    variable status                               : com_status_t;
-    variable receipt                              : receipt_t;
+    constant self                                 : actor_t                 := create("scoreboard");
+    variable requesting_actor                     : actor_t;
     variable message                              : message_ptr_t;
     variable request_id                           : message_id_t;
     variable checkpoint                           : integer                 := -1;
@@ -53,9 +52,8 @@ begin
       card_log(index) := card_log(index) + 1;
     end procedure update_card_log;
   begin
-    self := create("scoreboard");
-    subscribe(self, find("test runner"), status);
-    subscribe(self, find("monitor"), status);
+    subscribe(self, find("test runner"));
+    subscribe(self, find("monitor"));
     while true loop
       receive(net, self, message);
       case get_msg_type(message.payload.all) is
@@ -85,8 +83,7 @@ begin
       if n_received = checkpoint then
         reply(net, requesting_actor, request_id,
               get_status_reply((loaded_checksum = received_checksum) and (loaded_checksum2 = received_checksum2),
-                               loaded_cards = received_cards),
-              receipt);
+                               loaded_cards = received_cards));
       end if;
     end loop;
     wait;

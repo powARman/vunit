@@ -4,7 +4,7 @@
 -- License, v. 2.0. If a copy of the MPL was not distributed with this file,
 -- You can obtain one at http://mozilla.org/MPL/2.0/.
 --
--- Copyright (c) 2015-2016, Lars Asplund lars.anders.asplund@gmail.com
+-- Copyright (c) 2015-2017, Lars Asplund lars.anders.asplund@gmail.com
 
 library vunit_lib;
 context vunit_lib.vunit_context;
@@ -33,7 +33,7 @@ begin
       self, receiver, server, deferred_actor, publisher, subscriber,
       limited_inbox, actor_with_max_inbox, actor_with_bounded_inbox : actor_t;
     variable status            : com_status_t;
-    variable receipt, receipt2 : receipt_t;
+    variable receipt, receipt2, receipt3 : receipt_t;
     variable n_actors          : natural;
     variable message           : message_ptr_t;
     variable reply_message     : message_ptr_t;
@@ -48,17 +48,20 @@ begin
     while test_suite loop
       reset_messenger;
       self := create("test runner");
+
+      -- Create
       if run("Test that named actors can be created") then
         check(create("actor") /= null_actor_c, "Failed to create named actor");
         check(num_of_actors = 2, "Expected two actors");
         check(create("other actor").id /= create("another actor").id, "Failed to create unique actors");
-        check(num_of_actors = 4, "Expected three actors");
+        check(num_of_actors = 4, "Expected four actors");
       elsif run("Test that no name actors can be created") then
         check(create /= null_actor_c, "Failed to create no name actor");
-      elsif run("Test that two actors of the same name cannot be created") then
+      elsif run("Expected to fail: Test that two actors of the same name cannot be created") then
         actor := create("actor2");
-        check(actor /= null_actor_c, "Failed to create named actor");
-        check(create("actor2") = null_actor_c, "Was allowed to create an actor duplicate");
+        actor := create("actor2");
+
+      -- Find
       elsif run("Test that a created actor can be found") then
         actor_to_be_found := create("actor to be found");
         check(find("actor to be found", false) /= null_actor_c, "Failed to find created actor");
@@ -69,6 +72,7 @@ begin
         check(actor_with_deferred_creation /= null_actor_c, "Failed to find actor with deferred creation");
         check(num_of_deferred_creations = 1, "Expected one deferred creations");
       elsif run("Test that deferred creation can be suppressed when an actor is not found") then
+        actor := create("actor3");
         actor_with_deferred_creation := find("actor with deferred creation2", false);
         check(actor_with_deferred_creation = null_actor_c, "Didn't expect to find any actor");
         check(num_of_deferred_creations = 0, "Expected no deferred creations");
@@ -82,26 +86,21 @@ begin
               "Expected inbox size on actor with deferred creation to be one");
         check(inbox_size(create("actor to be created", 42)) = 42,
               "Expected inbox size on actor with deferred creation to change to given value when created");
+
+      -- Destroy
       elsif run("Test that a created actor can be destroyed") then
         actor_to_destroy := create("actor to destroy");
         actor_to_keep    := create("actor to keep");
         n_actors         := num_of_actors;
-        destroy(actor_to_destroy, status);
+        destroy(actor_to_destroy);
         check(num_of_actors = n_actors - 1, "Expected one less actor");
-        check(status = ok, "Expected destroy status to be ok");
         check(actor_to_destroy = null_actor_c, "Destroyed actor should be nullified");
         check(find("actor to destroy", false) = null_actor_c, "A destroyed actor should not be found");
         check(find("actor to keep", false) /= null_actor_c,
               "Actors other than the one destroyed must not be affected");
-      elsif run("Test that a non-existing actor cannot be destroyed") then
-        actor_to_destroy      := create("actor to destroy");
-        actor_to_destroy_copy := actor_to_destroy;
-        n_actors              := num_of_actors;
-        destroy(actor_to_destroy, status);
-        check(num_of_actors = n_actors - 1, "Expected one less actor");
-        destroy(actor_to_destroy_copy, status);
-        check(status = unknown_actor_error, "Expected destroy to fail with unknown actor error");
-        check(num_of_actors = n_actors - 1, "Expected no change in the number of actors");
+      elsif run("Expected to fail: Test that a non-existing actor cannot be destroyed") then
+        actor := null_actor_c;
+        destroy(actor);
       elsif run("Test that all actors can be destroyed") then
         reset_messenger;
         actor_to_destroy := create("actor to destroy 2");
@@ -109,6 +108,8 @@ begin
         check(num_of_actors = 2, "Expected two actors");
         reset_messenger;
         check(num_of_actors = 0, "Failed to destroy all actors");
+
+      -- Send and receive
       elsif run("Test that an actor can send a message to another actor") then
         start_receiver <= true;
         wait for 1 ns;
@@ -121,12 +122,11 @@ begin
         start_server <= true;
         wait for 1 ns;
         server       := find("server");
-        message      := compose("request", self);
-        send(net, server, message, receipt);
+        send(net, self, server, "request", receipt);
         check(receipt.status = ok, "Expected send to succeed");
         receive(net, self, message);
         if check(message.status = ok, "Expected no receive problems") then
-          check(message.payload.all = "request acknowledge", "Expected ""request acknowledge""");
+          check(message.payload.all = "request acknowledge", "Expected ""request acknowledge """ & message.payload.all);
         end if;
         delete(message);
       elsif run("Test that an actor can send a message to itself") then
@@ -136,6 +136,14 @@ begin
         if check(message.status = ok, "Expected no receive problems") then
           check(message.payload.all = "hello", "Expected ""hello""");
         end if;
+        delete(message);
+      elsif run("Test that sending without a receipt works") then
+        send(net, self, "hello");
+        receive(net, self, message);
+        check(message.payload.all = "hello", "Expected ""hello""");
+        send(net, self, self, "hello again");
+        receive(net, self, message);
+        check(message.payload.all = "hello again", "Expected ""hello again""");
         delete(message);
       elsif run("Test that an actor can poll for incoming messages") then
         receive(net, self, message, 0 ns);
@@ -149,14 +157,8 @@ begin
           check(message.sender = self, "Expected message from myself");
         end if;
         delete(message);
-      elsif run("Test that sending to a non-existing actor results in an error code") then
-        actor_to_destroy      := create("actor to destroy");
-        actor_to_destroy_copy := actor_to_destroy;
-        destroy(actor_to_destroy, status);
-        send(net, actor_to_destroy_copy, "hello void", receipt);
-        check(receipt.status = unknown_receiver_error, "Expected send to fail due to unknown receiver");
+      elsif run("Expected to fail: Test that sending to a non-existing actor results in an error") then
         send(net, null_actor_c, "hello void", receipt);
-        check(receipt.status = unknown_receiver_error, "Expected send to fail due to unknown receiver");
       elsif run("Test that an actor can send to an actor with deferred creation") then
         deferred_actor := find("deferred actor");
         send(net, deferred_actor, "hello actor to be created", receipt);
@@ -167,10 +169,9 @@ begin
           check(message.payload.all = "hello actor to be created", "Expected ""hello actor to be created""");
         end if;
         delete(message);
-      elsif run("Test that receiving from an actor with deferred creation results in an error code") then
+      elsif run("Expected to fail: Test that receiving from an actor with deferred creation results in an error") then
         deferred_actor := find("deferred actor");
         receive(net, deferred_actor, message);
-        check(message.status = deferred_receiver_error, "Not allowed to send to a deferred actor");
       elsif run("Test that empty messages can be sent") then
         send(net, self, "", receipt);
         check(receipt.status = ok, "Expected send to succeed");
@@ -179,56 +180,7 @@ begin
           check(message.payload.all = "", "Expected an empty message");
         end if;
         delete(message);
-      elsif run("Test that an actor can publish messages to multiple subscribers") then
-        publisher         := create("publisher");
-        start_subscribers <= true;
-        wait for 1 ns;
-        publish(net, publisher, "hello subscriber", status);
-        check(status = ok, "Expected publish to succeed");
-        wait until hello_subscriber_received = "11" for 1 ns;
-        check(hello_subscriber_received = "11", "Expected ""hello subscribers"" to be received at the subscribers");
-      elsif run("Test that a subscriber can unsubscribe") then
-        subscribe(self, self, status);
-        check(status = ok, "Expected subscription to be ok");
-        publish(net, self, "hello subscriber", status);
-        check(status = ok, "Expected publish to succeed");
-        receive(net, self, message, 0 ns);
-        if check(message.status = ok, "Expected no problems with receive") then
-          check(message.payload.all = "hello subscriber", "Expected a ""hello subscriber"" message");
-        end if;
-        unsubscribe(self, self, status);
-        publish(net, self, "hello subscriber", status);
-        check(status = ok, "Expected publish to succeed");
-        receive(net, self, message, 0 ns);
-        check(message.status = timeout, "Expected no message");
-      elsif run("Test that a destroyed subscriber is not addressed by the publisher") then
-        subscriber := create("subscriber");
-        subscribe(subscriber, self, status);
-        check(status = ok, "Expected subscription to be ok");
-        publish(net, self, "hello subscriber", status);
-        check(status = ok, "Expected publish to succeed");
-        receive(net, subscriber, message, 0 ns);
-        if check(message.status = ok, "Expected no problems with receive") then
-          check(message.payload.all = "hello subscriber", "Expected a ""hello subscriber"" message");
-        end if;
-        destroy(subscriber, status);
-        check(status = ok, "Expected destroy status to be ok");
-        publish(net, self, "hello subscriber", status);
-        check(status = ok, "Expected publish to succeed. Got " & com_status_t'image(status) & ".");
-      elsif run("Test that an actor can only subscribe once to the same publisher") then
-        subscribe(self, self, status);
-        check(status = ok, "Expected subscription to be ok");
-        subscribe(self, self, status);
-        check(status = already_a_subscriber_error, "Multiple subscriptions should not be allowed");
-        publish(net, self, "hello subscriber", status);
-        check(status = ok, "Expected publish to succeed");
-        receive(net, self, message, 0 ns);
-        if check(message.status = ok, "Expected no problems with receive") then
-          check(message.payload.all = "hello subscriber", "Expected a ""hello subscriber"" message");
-        end if;
-        receive(net, self, message, 0 ns);
-        check(message.status = timeout, "Expected no message");
-      elsif run("Test that each message gets an increasing message number") then
+      elsif run("Test that each sent message gets an increasing message number") then
         send(net, self, "", receipt);
         check(receipt.id = 1, "Expected first receipt id to be 1");
         send(net, self, "", receipt);
@@ -238,20 +190,94 @@ begin
         receive(net, self, message);
         check(message.id = 2, "Expected second message id to be 2");
         delete(message);
+      elsif run("Test that a limited-inbox receiver can receive as expected without blocking") then
+        start_limited_inbox <= true;
+        limited_inbox       := find("limited inbox");
+        t_start             := now;
+        send(net, limited_inbox, "First message", receipt);
+        t_stop              := now;
+        check(t_stop - t_start = 0 ns, "Expected no blocking on first message");
+        t_start             := now;
+        send(net, limited_inbox, "Second message", receipt, 0 ns);
+        t_stop              := now;
+        check(t_stop - t_start = 0 ns, "Expected no blocking on second message");
+        t_start             := now;
+        send(net, limited_inbox, "Third message", receipt, 11 ns);
+        t_stop              := now;
+        check(t_stop - t_start = 10 ns, "Expected a 10 ns blocking period on third message");
+
+        wait until limited_inbox_actor_done;
+      elsif run("Expected to fail: Test that sending to a limited-inbox receiver times out as expected") then
+        start_limited_inbox <= true;
+        limited_inbox       := find("limited inbox");
+        send(net, limited_inbox, "First message", receipt);
+        send(net, limited_inbox, "Second message", receipt, 0 ns);
+        send(net, limited_inbox, "Third message", receipt, 9 ns);
+
+      -- Publish, subscribe, and unsubscribe
+      elsif run("Test that an actor can publish messages to multiple subscribers") then
+        publisher         := create("publisher");
+        start_subscribers <= true;
+        wait for 1 ns;
+        publish(net, publisher, "hello subscriber");
+        wait until hello_subscriber_received = "11" for 1 ns;
+        check(hello_subscriber_received = "11", "Expected ""hello subscribers"" to be received at the subscribers");
+      elsif run("Test that a subscriber can unsubscribe") then
+        subscribe(self, self);
+        publish(net, self, "hello subscriber");
+        receive(net, self, message, 0 ns);
+        if check(message.status = ok, "Expected no problems with receive") then
+          check(message.payload.all = "hello subscriber", "Expected a ""hello subscriber"" message");
+        end if;
+        unsubscribe(self, self);
+        publish(net, self, "hello subscriber");
+        receive(net, self, message, 0 ns);
+        check(message.status = timeout, "Expected no message");
+      elsif run("Test that a destroyed subscriber is not addressed by the publisher") then
+        subscriber := create("subscriber");
+        subscribe(subscriber, self);
+        publish(net, self, "hello subscriber");
+        receive(net, subscriber, message, 0 ns);
+        if check(message.status = ok, "Expected no problems with receive") then
+          check(message.payload.all = "hello subscriber", "Expected a ""hello subscriber"" message");
+        end if;
+        destroy(subscriber);
+        publish(net, self, "hello subscriber");
+      elsif run("Expected to fail: Test that an actor can only subscribe once to the same publisher") then
+        subscribe(self, self);
+        subscribe(self, self);
+      elsif run("Expected to fail: Test that publishing to subscribers with full inboxes results is an error") then
+        start_limited_inbox_subscriber <= true;
+        wait for 1 ns;
+        publish(net, self, "hello subscribers");
+        publish(net, self, "hello subscribers", 9 ns);
+      elsif run("Test that publishing to subscribers with full inboxes results passes if waiting") then
+        start_limited_inbox_subscriber <= true;
+        wait for 1 ns;
+        publish(net, self, "hello subscribers", 0 ns);
+        publish(net, self, "hello subscribers", 11 ns);
+
+
+      -- Request, (receive_)reply and acknowledge
       elsif run("Test that a client can wait for an out-of-order request reply") then
         start_server2 <= true;
         server        := find("server2");
         send(net, self, server, "request1", receipt);
         send(net, self, server, "request2", receipt2);
+        send(net, self, server, "request3", receipt3);
 
         receive_reply(net, self, receipt2.id, reply_message);
         check(reply_message.payload.all = "reply2", "Expected ""reply2""");
         check(reply_message.request_id = receipt2.id, "Expected request_id = " & integer'image(receipt2.id) &
               " but got " & integer'image(reply_message.request_id));
-        receive_reply(net, self, receipt.id, reply_message);
-        check(reply_message.payload.all = "reply1", "Expected ""reply1""");
-        check(reply_message.request_id = receipt.id, "Expected request_id = " & integer'image(receipt.id) &
-              " but got " & integer'image(reply_message.request_id));
+
+        receive_reply(net, self, receipt.id, ack, status);
+        check(status = ok, "Expected receive_reply to succeed");
+        check_false(ack, "Expected negative acknowledgement");
+
+        receive_reply(net, self, receipt3.id, ack);
+        check(ack, "Expected positive acknowledgement");
+
         delete(reply_message);
       elsif run("Test that a synchronous request can be made") then
         start_server3 <= true;
@@ -265,8 +291,7 @@ begin
         check(status = ok, "Expected request to succeed");
         check(ack, "Expected positive acknowledgement");
 
-        request(net, self, server, "request3", ack, status);
-        check(status = ok, "Expected request to succeed");
+        request(net, self, server, "request3", ack);
         check(not ack, "Expected negative acknowledgement");
 
         t_start := now;
@@ -284,66 +309,6 @@ begin
         check(reply_message.status = timeout, "Expected timeout");
         check(now - t_start = 5 ns, "Expected timeout after 5 ns");
         delete(reply_message);
-      elsif run("Test that a receiver is protected from flooding by creating a bounded inbox") then
-        start_limited_inbox <= true;
-        limited_inbox       := find("limited inbox");
-        t_start             := now;
-        send(net, limited_inbox, "First message", receipt);
-        t_stop              := now;
-        check(t_stop - t_start = 0 ns, "Expected no blocking");
-        t_start             := now;
-        send(net, limited_inbox, "Second message", receipt, 0 ns);
-        t_stop              := now;
-        check(t_stop - t_start = 0 ns, "Expected no blocking");
-        check(receipt.status = full_inbox_error, "Exepcted full inbox error");
-        t_start             := now;
-        send(net, limited_inbox, "Second message", receipt, 3 ns);
-        t_stop              := now;
-        check(t_stop - t_start = 3 ns, "Expected 3 ns blocking");
-        check(receipt.status = full_inbox_error, "Exepcted full inbox error");
-        t_start             := now;
-        send(net, limited_inbox, "Second message", receipt);
-        t_stop              := now;
-        check(t_stop - t_start = 7 ns, "Expected a 7 ns blocking period");
-        receive(net, self, message);
-        t_start             := now;
-        reply(net, limited_inbox, message.id, "reply1", receipt);
-        t_stop              := now;
-        check(t_stop - t_start = 0 ns, "Expected no blocking");
-        receive(net, self, message);
-        t_start             := now;
-        reply(net, limited_inbox, message.id, "reply2", receipt, 0 ns);
-        t_stop              := now;
-        check(t_stop - t_start = 0 ns, "Expected no blocking");
-        check(receipt.status = full_inbox_error, "Exepcted full inbox error");
-        t_start             := now;
-        reply(net, limited_inbox, message.id, "reply2", receipt, 7 ns);
-        t_stop              := now;
-        check(t_stop - t_start = 7 ns, "Expected 7 ns blocking");
-        check(receipt.status = full_inbox_error, "Exepcted full inbox error");
-        t_start             := now;
-        reply(net, limited_inbox, message.id, "reply2", receipt);
-        t_stop              := now;
-        check(t_stop - t_start = 13 ns, "Expected a 20 ns blocking period");
-        wait until limited_inbox_actor_done;
-      elsif run("Test that publish skip sending messages to subscribers with full inboxes and that this can be detected") then
-        start_limited_inbox_subscriber <= true;
-        wait for 1 ns;
-        check_equal(num_of_missed_messages(find("limited inbox subscriber")), 0,
-                    "No messages should have been missed at this point");
-        publish(net, self, "hello subscribers", status);
-        check(status = ok, "Expected publish to pass");
-        check_equal(num_of_missed_messages(find("limited inbox subscriber")), 0,
-                    "No messages should have been missed at this point");
-        publish(net, self, "hello subscribers", status);
-        check(status = full_inbox_error, "Expected publish to skip subscriber with full inbox");
-        check_equal(num_of_missed_messages(find("limited inbox subscriber")), 1,
-                    "Expected one missed message");
-        publish(net, self, "hello subscribers", status);
-        check(status = full_inbox_error, "Expected publish to skip subscriber with full inbox");
-        check_equal(num_of_missed_messages(find("limited inbox subscriber")), 2,
-                    "Expected two missed messages");
-        check_equal(num_of_missed_messages(self), 0, "The test runner actor should not indicate missed messages");
       end if;
     end loop;
 
@@ -389,12 +354,11 @@ begin
     process is
       variable self, publisher : actor_t;
       variable message         : message_ptr_t;
-      variable status          : com_status_t;
     begin
       wait until start_subscribers;
       self      := create("subscriber " & integer'image(i));
       publisher := find("publisher");
-      subscribe(self, publisher, status);
+      subscribe(self, publisher);
       receive(net, self, message);
       if check(message.payload.all = "hello subscriber", "Expected ""hello subscriber""") then
         hello_subscriber_received(i)     <= '1';
@@ -407,8 +371,7 @@ begin
 
   server2 : process is
     variable self                               : actor_t;
-    variable request_message1, request_message2 : message_ptr_t;
-    variable receipt                            : receipt_t;
+    variable request_message1, request_message2, request_message3 : message_ptr_t;
   begin
     wait until start_server2;
     self := create("server2");
@@ -416,11 +379,12 @@ begin
     check(request_message1.payload.all = "request1", "Expected ""request1""");
     receive(net, self, request_message2);
     check(request_message2.payload.all = "request2", "Expected ""request2""");
+    receive(net, self, request_message3);
+    check(request_message3.payload.all = "request3", "Expected ""request3""");
 
-    reply(net, request_message2.sender, request_message2.id, "reply2", receipt);
-    check(receipt.status = ok, "Expected reply to succeed");
-    reply(net, request_message1.sender, request_message1.id, "reply1", receipt);
-    check(receipt.status = ok, "Expected reply to succeed");
+    reply(net, request_message2.sender, request_message2.id, "reply2");
+    acknowledge(net, request_message3.sender, request_message3.id, true);
+    acknowledge(net, request_message1.sender, request_message1.id, false);
 
     delete(request_message1);
     delete(request_message2);
@@ -430,25 +394,22 @@ begin
   server3 : process is
     variable self            : actor_t;
     variable request_message : message_ptr_t;
-    variable receipt         : receipt_t;
   begin
     wait until start_server3;
     self := create("server3", 1);
 
     receive(net, self, request_message);
     check(request_message.payload.all = "request1", "Expected ""request1""");
-    reply(net, request_message.sender, request_message.id, "reply1", receipt);
-    check(receipt.status = ok, "Expected reply to succeed");
+    reply(net, request_message.sender, request_message.id, "reply1");
     delete(request_message);
 
     receive(net, self, request_message);
     check(request_message.payload.all = "request2", "Expected ""request2""");
-    acknowledge(net, request_message.sender, request_message.id, true, receipt);
-    check(receipt.status = ok, "Expected acknowledge to succeed");
+    acknowledge(net, request_message.sender, request_message.id, true);
     delete(request_message);
 
     receive(net, self, request_message);
-    acknowledge(net, request_message.sender, request_message.id, false, receipt);
+    acknowledge(net, request_message.sender, request_message.id, false);
     delete(request_message);
 
     receive(net, self, request_message);
@@ -465,19 +426,14 @@ begin
     variable self, test_runner  : actor_t;
     variable message            : message_ptr_t;
     variable status             : com_status_t;
-    variable receipt1, receipt2 : receipt_t;
   begin
     wait until start_limited_inbox;
-    self                     := create("limited inbox", 1);
+    self                     := create("limited inbox", 2);
     test_runner              := find("test runner");
     wait for 10 ns;
     receive(net, self, message);
     receive(net, self, message);
-    send(net, self, test_runner, "request1", receipt1);
-    send(net, self, test_runner, "request2", receipt2);
-    wait for 20 ns;
-    receive_reply(net, self, receipt1.id, message);
-    receive_reply(net, self, receipt2.id, message);
+    receive(net, self, message);
     delete(message);
     limited_inbox_actor_done <= true;
     wait;
@@ -486,16 +442,13 @@ begin
   limited_inbox_subscriber : process is
     variable self : actor_t;
     variable message           : message_ptr_t;
-    variable status            : com_status_t;
   begin
     wait until start_limited_inbox_subscriber;
     self := create("limited inbox subscriber", 1);
-    subscribe(self, find("test runner"), status);
+    subscribe(self, find("test runner"));
     wait for 10 ns;
     receive(net, self, message);
     wait;
   end process limited_inbox_subscriber;
 
 end test_fixture;
-
--- vunit_pragma run_all_in_same_sim

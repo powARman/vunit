@@ -4,7 +4,7 @@
 -- License, v. 2.0. If a copy of the MPL was not distributed with this file,
 -- You can obtain one at http://mozilla.org/MPL/2.0/.
 --
--- Copyright (c) 2015, Lars Asplund lars.anders.asplund@gmail.com
+-- Copyright (c) 2015-2017, Lars Asplund lars.anders.asplund@gmail.com
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -23,7 +23,10 @@ package com_types_pkg is
                         already_a_subscriber_error,
                         not_a_subscriber_error,
                         full_inbox_error,
-                        reply_missing_request_id_error);
+                        reply_missing_request_id_error,
+                        duplicate_actor_name_error);
+
+  subtype com_error_t is com_status_t range null_message_error to duplicate_actor_name_error;
 
   type actor_t is record
     id : natural;
