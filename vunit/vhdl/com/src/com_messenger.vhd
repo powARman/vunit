@@ -67,6 +67,14 @@ package com_messenger_pkg is
     procedure subscribe (subscriber   : actor_t; publisher : actor_t);
     procedure unsubscribe (subscriber : actor_t; publisher : actor_t);
 
+    ---------------------------------------------------------------------------
+    -- Misc
+    ---------------------------------------------------------------------------
+    procedure allow_timeout;
+    impure function timeout_is_allowed return boolean;
+    procedure allow_deprecated;
+    procedure deprecated (msg : string);
+
   end protected;
 end package com_messenger_pkg;
 
@@ -115,6 +123,8 @@ package body com_messenger_pkg is
     variable n_recycled_envelopes : natural                := 0;
     variable null_message         : message_t              := (0, ok, null_actor_c, no_message_id_c, null);
     variable next_message_id      : message_id_t           := no_message_id_c + 1;
+    variable timeout_allowed : boolean := false;
+    variable deprecated_allowed : boolean := false;
 
     -----------------------------------------------------------------------------
     -- Handling of actors
@@ -560,6 +570,28 @@ package body com_messenger_pkg is
     remove_subscriber(subscriber, publisher);
   end procedure unsubscribe;
 
+  -----------------------------------------------------------------------------
+  -- Misc
+  -----------------------------------------------------------------------------
+  procedure allow_timeout is
+  begin
+    timeout_allowed := true;
+  end procedure allow_timeout;
+
+  impure function timeout_is_allowed return boolean is
+  begin
+    return timeout_allowed;
+  end function timeout_is_allowed;
+
+  procedure allow_deprecated is
+  begin
+    deprecated_allowed := true;
+  end procedure allow_deprecated;
+
+  procedure deprecated (msg : string) is
+  begin
+    check(deprecated_allowed, deprecated_interface_error, msg);
+  end;
 end protected body;
 
 end package body com_messenger_pkg;

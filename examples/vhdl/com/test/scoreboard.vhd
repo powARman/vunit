@@ -28,9 +28,8 @@ architecture behavioral of scoreboard is
 begin
   main : process is
     constant self                                 : actor_t                 := create("scoreboard");
-    variable requesting_actor                     : actor_t;
-    variable message                              : message_ptr_t;
-    variable request_id                           : message_id_t;
+    variable message                     : message_ptr_t;
+    variable request                     : message_ptr_t;
     variable checkpoint                           : integer                 := -1;
     variable n_received                           : natural;
     variable card_msg                             : card_msg_t;
@@ -75,13 +74,12 @@ begin
           n_received := n_received + 1;
         when get_status =>
           checkpoint       := decode(message.payload.all).checkpoint;
-          requesting_actor := message.sender;
-          request_id       := message.id;
+          copy(message, request);
         when others => null;
       end case;
 
       if n_received = checkpoint then
-        reply(net, requesting_actor, request_id,
+        reply(net, request,
               get_status_reply((loaded_checksum = received_checksum) and (loaded_checksum2 = received_checksum2),
                                loaded_cards = received_cards));
       end if;

@@ -94,12 +94,14 @@ begin
     constant self     : actor_t := create("driver");
     variable message  : message_ptr_t;
     variable card_msg : card_msg_t;
+    variable status : com_status_t;
   begin
     subscribe(self, find("test runner"));
     loop
       wait until rising_edge(clk);
-      receive(net, self, message, 0 ns);
-      if message.status = ok then
+      wait_for_message(net, self, status, 0 ns);
+      if status = ok then
+        message := get_message(self);
         case get_msg_type(message.payload.all) is
           when reset_shuffler =>
             rst         <= '1';

@@ -24,9 +24,11 @@ package com_types_pkg is
                         not_a_subscriber_error,
                         full_inbox_error,
                         reply_missing_request_id_error,
+                        unknown_request_id_error,
+                        deprecated_interface_error,
                         duplicate_actor_name_error);
 
-  subtype com_error_t is com_status_t range null_message_error to duplicate_actor_name_error;
+  subtype com_error_t is com_status_t range timeout to duplicate_actor_name_error;
 
   type actor_t is record
     id : natural;

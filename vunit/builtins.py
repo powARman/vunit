@@ -325,6 +325,9 @@ class BuiltinsAdder(object):
 
     library.add_source_files(join(VHDL_PATH, "com", "src", "com_support.vhd"))
     library.add_source_files(join(VHDL_PATH, "com", "src", "com_messenger.vhd"))
+    library.add_source_files(join(VHDL_PATH, "com", "src", "com_deprecated.vhd"))
+    library.add_source_files(join(VHDL_PATH, "com", "src", "com_common.vhd"))
+    library.add_source_files(join(VHDL_PATH, "com", "src", "com_string_payload.vhd"))
         old_args = self._already_added[name]
         if args != old_args:
             raise RuntimeError(

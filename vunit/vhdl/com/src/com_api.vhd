@@ -18,7 +18,6 @@ package com_pkg is
   impure function create (name : string := ""; inbox_size : positive := positive'high) return actor_t;  --
   impure function find (name : string; enable_deferred_creation : boolean := true) return actor_t;
 
-  procedure destroy (actor : inout actor_t; status : out com_status_t);
   procedure destroy (actor : inout actor_t);
   procedure reset_messenger;
 
@@ -27,191 +26,47 @@ package com_pkg is
   impure function inbox_size (actor : actor_t) return natural;
 
   -----------------------------------------------------------------------------
-  -- Send related subprograms
+  -- Message related subprograms
   -----------------------------------------------------------------------------
-  procedure send (
-    signal net        : inout network_t;
-    constant sender   : in    actor_t;
-    constant receiver : in    actor_t;
-    constant payload  : in    string := "";
-    variable receipt  : out   receipt_t;
-    constant timeout  : in    time   := max_timeout_c);
-  procedure send (
-    signal net        : inout network_t;
-    constant sender   : in    actor_t;
-    constant receiver : in    actor_t;
-    constant payload  : in    string := "";
-    constant timeout  : in    time   := max_timeout_c);
-  procedure send (
-    signal net        : inout network_t;
-    constant receiver : in    actor_t;
-    constant payload  : in    string := "";
-    variable receipt  : out   receipt_t;
-    constant timeout  : in    time   := max_timeout_c);
-  procedure send (
-    signal net        : inout network_t;
-    constant receiver : in    actor_t;
-    constant payload  : in    string := "";
-    constant timeout  : in    time   := max_timeout_c);
-  procedure send (
-    signal net            : inout network_t;
-    constant receiver     : in    actor_t;
-    variable message      : inout message_ptr_t;
-    variable receipt      : out   receipt_t;
-    constant timeout      : in    time    := max_timeout_c;
-    constant keep_message : in    boolean := false);
-  procedure send (
-    signal net            : inout network_t;
-    constant receiver     : in    actor_t;
-    variable message      : inout message_ptr_t;
-    constant timeout      : in    time    := max_timeout_c;
-    constant keep_message : in    boolean := false);
-  procedure request (
-    signal net               : inout network_t;
-    constant sender          : in    actor_t;
-    constant receiver        : in    actor_t;
-    constant request_payload : in    string := "";
-    variable reply_message   : inout message_ptr_t;
-    constant timeout         : in    time   := max_timeout_c);
-  procedure request (
-    signal net               : inout network_t;
-    constant receiver        : in    actor_t;
-    variable request_message : inout message_ptr_t;
-    variable reply_message   : inout message_ptr_t;
-    constant timeout         : in    time    := max_timeout_c;
-    constant keep_message    : in    boolean := false);
-  procedure request (
-    signal net               : inout network_t;
-    constant sender          : in    actor_t;
-    constant receiver        : in    actor_t;
-    constant request_payload : in    string := "";
-    variable positive_ack    : out   boolean;
-    variable status          : out   com_status_t;
-    constant timeout         : in    time   := max_timeout_c);
-  procedure request (
-    signal net               : inout network_t;
-    constant sender          : in    actor_t;
-    constant receiver        : in    actor_t;
-    constant request_payload : in    string := "";
-    variable positive_ack    : out   boolean;
-    constant timeout         : in    time   := max_timeout_c);
-  procedure request (
-    signal net               : inout network_t;
-    constant receiver        : in    actor_t;
-    variable request_message : inout message_ptr_t;
-    variable positive_ack    : out   boolean;
-    variable status          : out   com_status_t;
-    constant timeout         : in    time    := max_timeout_c;
-    constant keep_message    : in    boolean := false);
-  procedure request (
-    signal net               : inout network_t;
-    constant receiver        : in    actor_t;
-    variable request_message : inout message_ptr_t;
-    variable positive_ack    : out   boolean;
-    constant timeout         : in    time    := max_timeout_c;
-    constant keep_message    : in    boolean := false);
-  procedure reply (
-    signal net          : inout network_t;
-    constant sender     : in    actor_t;
-    constant receiver   : in    actor_t;
-    constant request_id : in    message_id_t;
-    constant payload    : in    string := "";
-    variable receipt    : out   receipt_t;
-    constant timeout    : in    time   := max_timeout_c);
-  procedure reply (
-    signal net          : inout network_t;
-    constant sender     : in    actor_t;
-    constant receiver   : in    actor_t;
-    constant request_id : in    message_id_t;
-    constant payload    : in    string := "";
-    constant timeout    : in    time   := max_timeout_c);
-  procedure reply (
-    signal net          : inout network_t;
-    constant receiver   : in    actor_t;
-    constant request_id : in    message_id_t;
-    constant payload    : in    string := "";
-    variable receipt    : out   receipt_t;
-    constant timeout    : in    time   := max_timeout_c);
-  procedure reply (
-    signal net          : inout network_t;
-    constant receiver   : in    actor_t;
-    constant request_id : in    message_id_t;
-    constant payload    : in    string := "";
-    constant timeout    : in    time   := max_timeout_c);
-  procedure reply (
-    signal net            : inout network_t;
-    constant receiver     : in    actor_t;
-    variable message      : inout message_ptr_t;
-    variable receipt      : out   receipt_t;
-    constant timeout      : in    time    := max_timeout_c;
-    constant keep_message : in    boolean := false);
-  procedure reply (
-    signal net            : inout network_t;
-    constant receiver     : in    actor_t;
-    variable message      : inout message_ptr_t;
-    constant timeout      : in    time    := max_timeout_c;
-    constant keep_message : in    boolean := false);
-  procedure acknowledge (
-    signal net            : inout network_t;
-    constant sender       : in    actor_t;
-    constant receiver     : in    actor_t;
-    constant request_id   : in    message_id_t;
-    constant positive_ack : in    boolean := true;
-    variable receipt      : out   receipt_t;
-    constant timeout      : in    time    := max_timeout_c);
-  procedure acknowledge (
-    signal net            : inout network_t;
-    constant sender       : in    actor_t;
-    constant receiver     : in    actor_t;
-    constant request_id   : in    message_id_t;
-    constant positive_ack : in    boolean := true;
-    constant timeout      : in    time    := max_timeout_c);
-  procedure acknowledge (
-    signal net            : inout network_t;
-    constant receiver     : in    actor_t;
-    constant request_id   : in    message_id_t;
-    constant positive_ack : in    boolean := true;
-    variable receipt      : out   receipt_t;
-    constant timeout      : in    time    := max_timeout_c);
-  procedure acknowledge (
-    signal net            : inout network_t;
-    constant receiver     : in    actor_t;
-    constant request_id   : in    message_id_t;
-    constant positive_ack : in    boolean := true;
-    constant timeout      : in    time    := max_timeout_c);
-  procedure publish (
-    signal net       : inout network_t;
-    constant sender  : in    actor_t;
-    constant payload : in    string := "";
-    variable status  : out   com_status_t;
-    constant timeout : in    time   := max_timeout_c);
-  procedure publish (
-    signal net       : inout network_t;
-    constant sender  : in    actor_t;
-    constant payload : in    string := "";
-    constant timeout : in    time   := max_timeout_c);
-  procedure publish (
-    signal net            : inout network_t;
-    variable message      : inout message_ptr_t;
-    variable status       : out   com_status_t;
-    constant timeout      : in    time    := max_timeout_c;
-    constant keep_message : in    boolean := false);
-  procedure publish (
-    signal net            : inout network_t;
-    variable message      : inout message_ptr_t;
-    constant timeout      : in    time    := max_timeout_c;
-    constant keep_message : in    boolean := false);
+  impure function new_message (sender : actor_t := null_actor_c) return message_ptr_t;
+  impure function compose (
+    payload : string := "";
+    sender : actor_t := null_actor_c;
+    request_id : message_id_t := no_message_id_c)
+    return message_ptr_t;
+  procedure copy (src : inout message_ptr_t; dst : inout message_ptr_t);
+  procedure delete (message : inout message_ptr_t);
 
   -----------------------------------------------------------------------------
   -- Receive related subprograms
   -----------------------------------------------------------------------------
-  procedure wait_for_messages (
+  procedure wait_for_message (
     signal net               : in  network_t;
     constant receiver        : in  actor_t;
     variable status          : out com_status_t;
-    constant receive_timeout : in  time := max_timeout_c);
-  impure function has_messages (actor   : actor_t) return boolean;
+    constant timeout : in  time := max_timeout_c);
+  procedure wait_for_reply (
+    signal net               : inout network_t;
+    variable request  : inout message_ptr_t;
+    variable status          : out   com_status_t;
+    constant timeout : in    time := max_timeout_c);
+  procedure wait_for_reply (
+    signal net               : inout network_t;
+    constant receiver        : in    actor_t;
+    constant receipt  : in receipt_t;
+    variable status          : out   com_status_t;
+    constant timeout : in    time := max_timeout_c);
+  impure function has_message (actor   : actor_t) return boolean;
   impure function get_message (receiver : actor_t; delete_from_inbox : boolean := true) return message_ptr_t;
+  impure function get_reply (
+    receiver : actor_t;
+    receipt : receipt_t;
+    delete_from_inbox : boolean := true)
+    return message_ptr_t;
+  procedure get_reply (
+    variable request           : inout message_ptr_t;
+    variable reply             : inout message_ptr_t;
+    constant delete_from_inbox : in    boolean := true);
   procedure receive (
     signal net        : inout network_t;
     constant receiver : in    actor_t;
@@ -220,41 +75,79 @@ package com_pkg is
   procedure receive_reply (
     signal net          : inout network_t;
     constant receiver   : in    actor_t;
-    constant request_id : in    message_id_t;
+    constant receipt    : in    receipt_t;
+    variable message    : inout message_ptr_t;
+    constant timeout    : in    time := max_timeout_c);
+  procedure receive_reply (
+    signal net          : inout network_t;
+    variable request    : inout    message_ptr_t;
     variable message    : inout message_ptr_t;
     constant timeout    : in    time := max_timeout_c);
   procedure receive_reply (
     signal net            : inout network_t;
     constant receiver     : in    actor_t;
-    constant request_id   : in    message_id_t;
+    constant receipt    : in    receipt_t;
     variable positive_ack : out   boolean;
-    variable status       : out   com_status_t;
     constant timeout      : in    time := max_timeout_c);
   procedure receive_reply (
     signal net            : inout network_t;
-    constant receiver     : in    actor_t;
-    constant request_id   : in    message_id_t;
+    variable request    : inout    message_ptr_t;
     variable positive_ack : out   boolean;
     constant timeout      : in    time := max_timeout_c);
-  procedure subscribe (
-    constant subscriber : in  actor_t;
-    constant publisher  : in  actor_t;
-    variable status     : out com_status_t);
-  procedure subscribe (subscriber : actor_t; publisher : actor_t);
-  procedure unsubscribe (
-    constant subscriber : in  actor_t;
-    constant publisher  : in  actor_t;
-    variable status     : out com_status_t);
-  procedure unsubscribe (subscriber : actor_t; publisher : actor_t);  --
-  impure function num_of_missed_messages (actor : actor_t) return natural;
 
   -----------------------------------------------------------------------------
-  -- Message related subprograms
+  -- Subscriptions
   -----------------------------------------------------------------------------
-  impure function compose (
-    payload : string := "";
-    sender : actor_t := null_actor_c;
-    request_id : message_id_t := no_message_id_c)
-    return message_ptr_t;
-  procedure delete (message : inout message_ptr_t);
+  procedure subscribe (subscriber : actor_t; publisher : actor_t);
+  procedure unsubscribe (subscriber : actor_t; publisher : actor_t);
+
+  -----------------------------------------------------------------------------
+  -- Send related subprograms
+  -----------------------------------------------------------------------------
+  procedure send (
+    signal net            : inout network_t;
+    constant receiver     : in    actor_t;
+    variable message      : inout message_ptr_t;
+    constant timeout      : in    time    := max_timeout_c;
+    constant keep_message : in    boolean := true);
+  procedure request (
+    signal net               : inout network_t;
+    constant receiver        : in    actor_t;
+    variable request_message : inout message_ptr_t;
+    variable reply_message   : inout message_ptr_t;
+    constant timeout         : in    time    := max_timeout_c;
+    constant keep_message    : in    boolean := false);
+  procedure request (
+    signal net               : inout network_t;
+    constant receiver        : in    actor_t;
+    variable request_message : inout message_ptr_t;
+    variable positive_ack    : out   boolean;
+    constant timeout         : in    time    := max_timeout_c;
+    constant keep_message    : in    boolean := false);
+  procedure reply (
+    signal net            : inout network_t;
+    variable request   : inout    message_ptr_t;
+    variable message      : inout message_ptr_t;
+    constant timeout      : in    time    := max_timeout_c;
+    constant keep_message : in    boolean := false);
+  procedure publish (
+    signal net            : inout network_t;
+    variable message      : inout message_ptr_t;
+    constant timeout      : in    time    := max_timeout_c;
+    constant keep_message : in    boolean := false);
+  procedure acknowledge (
+    signal net            : inout network_t;
+    variable request   : inout    message_ptr_t;
+    constant positive_ack : in    boolean := true;
+    constant timeout      : in    time    := max_timeout_c);
+
+  -----------------------------------------------------------------------------
+  -- Misc
+  -----------------------------------------------------------------------------
+
+  procedure allow_timeout;
+  procedure allow_deprecated;
+  procedure deprecated (msg : string);
+
+
 end package;
