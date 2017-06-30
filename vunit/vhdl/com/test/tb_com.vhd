@@ -22,7 +22,7 @@ end entity tb_com;
 
 architecture test_fixture of tb_com is
   signal hello_world_received, start_receiver, start_server,
-    start_server2, start_server3, start_server4, start_subscribers : boolean := false;
+    start_server2, start_server3, start_server4, start_server5, start_subscribers : boolean := false;
   signal hello_subscriber_received                     : std_logic_vector(1 to 2) := "ZZ";
   signal start_limited_inbox, limited_inbox_actor_done : boolean                  := false;
   signal start_limited_inbox_subscriber                : boolean                  := false;
@@ -119,8 +119,10 @@ begin
         start_receiver <= true;
         wait for 1 ns;
         receiver       := find("receiver");
-        send(net, receiver, "hello world", receipt);
-        check(receipt.status = ok, "Expected send to succeed");
+        message := compose("hello world", self);
+        send(net, receiver, message);
+        check(message.sender = self);
+        check(message.receiver = receiver);
         wait until hello_world_received for 1 ns;
         check(hello_world_received, "Expected ""hello world"" to be received at the server");
       elsif run("Test that an actor can send a message in response to another message from an a priori unknown actor") then
@@ -158,7 +160,6 @@ begin
       elsif run("Test that an actor can send to an actor with deferred creation") then
         actor := find("deferred actor");
         send(net, actor, "hello actor to be created");
-        check(receipt.status = ok, "Expected send to succeed");
         actor := create("deferred actor");
         receive(net, actor, message);
         check(message.status = ok, "Expected no problems with receive");
@@ -209,7 +210,10 @@ begin
         publisher         := create("publisher");
         start_subscribers <= true;
         wait for 1 ns;
-        publish(net, publisher, "hello subscriber");
+        message := compose("hello subscriber");
+        publish(net, publisher, message);
+        check(message.sender = publisher);
+        check(message.receiver = null_actor_c);
         wait until hello_subscriber_received = "11" for 1 ns;
         check(hello_subscriber_received = "11", "Expected ""hello subscribers"" to be received at the subscribers");
       elsif run("Test that a subscriber can unsubscribe") then
@@ -255,6 +259,8 @@ begin
         send(net, self, server, "request3", receipt3);
 
         receive_reply(net, request_message, reply_message);
+        check(reply_message.sender = server);
+        check(reply_message.receiver = self);
         check_equal(reply_message.payload.all, "reply2");
         check_equal(reply_message.request_id, request_message.id);
         check(reply_message.sender = server, "Expected message to be from server");
@@ -304,6 +310,24 @@ begin
         wait_for_reply(net, request_message, status);
         get_reply(request_message, message);
         check_equal(message.payload.all, "reply4");
+      elsif run("Test that an anonymous request can be made") then
+        start_server5 <= true;
+        server := find("server5");
+
+        request_message := compose("request");
+        send(net, server, request_message);
+        wait for 10 ns;
+        receive_reply(net, request_message, reply_message);
+        check_equal(reply_message.payload.all, "reply");
+
+        request_message := compose("request2");
+        send(net, server, request_message);
+        receive_reply(net, request_message, reply_message);
+        check_equal(reply_message.payload.all, "reply2");
+
+        request_message := compose("request3");
+        request(net, server, request_message, reply_message);
+        check_equal(reply_message.payload.all, "reply3");
 
       -- Timeout
       elsif run("Expected to fail: Test that timeout on receive leads to an error") then
@@ -334,8 +358,11 @@ begin
   begin
     wait until start_receiver;
     self                 := create("receiver");
-    wait_for_message(net, self, status);
-    message              := get_message(self);
+    receive(net, self, message);
+    check(message.sender = find("test runner"));
+    debug(to_string(message.receiver.id));
+    debug(to_string(self.id));
+    check(message.receiver = self);
     hello_world_received <= check_equal(message.payload.all, "hello world");
     wait;
   end process receiver;
@@ -373,7 +400,7 @@ begin
   end generate subscribers;
 
   server2 : process is
-    variable self                                                 : actor_t;
+    variable self                                    : actor_t;
     variable request_message1, request_message2, request_message3 : message_ptr_t;
     variable reply_message                                        : message_ptr_t;
   begin
@@ -386,8 +413,10 @@ begin
     receive(net, self, request_message3);
     check_equal(request_message3.payload.all, "request3");
 
-    reply_message := compose("reply2", self);
+    reply_message := compose("reply2");
     reply(net, request_message2, reply_message);
+    check(reply_message.sender = self);
+    check(reply_message.receiver = find("test runner"));
     acknowledge(net, request_message3, true);
     acknowledge(net, request_message1, false);
     wait;
@@ -429,6 +458,33 @@ begin
     reply(net, request_message, "reply4");
     wait;
   end process server4;
+
+  server5 : process is
+    variable self            : actor_t;
+    variable request_message : message_ptr_t;
+    variable reply_message : message_ptr_t;
+  begin
+    wait until start_server5;
+    self := create("server5");
+
+    receive(net, self, request_message);
+    check_equal(request_message.payload.all, "request");
+    reply_message := compose("reply");
+    reply(net, request_message, reply_message);
+
+    receive(net, self, request_message);
+    check_equal(request_message.payload.all, "request2");
+    reply_message := compose("reply2");
+    wait for 10 ns;
+    reply(net, request_message, reply_message);
+
+    receive(net, self, request_message);
+    check_equal(request_message.payload.all, "request3");
+    reply_message := compose("reply3");
+    reply(net, request_message, reply_message);
+
+    wait;
+  end process server5;
 
   limited_inbox_actor : process is
     variable self, test_runner : actor_t;

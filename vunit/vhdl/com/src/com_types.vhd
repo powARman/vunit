@@ -41,6 +41,7 @@ package com_types_pkg is
     id         : message_id_t;
     status     : com_status_t;
     sender     : actor_t;
+    receiver     : actor_t;
     request_id : message_id_t;
     payload    : line;
   end record message_t;

@@ -204,13 +204,14 @@ package body com_deprecated_pkg is
     check(message /= null, null_message_error);
     check(not messenger.unknown_actor(receiver), unknown_receiver_error);
 
-    if messenger.inbox_is_full(receiver) then
-      wait on net until not messenger.inbox_is_full(receiver) for timeout;
-      check(not messenger.inbox_is_full(receiver), full_inbox_error);
+    if messenger.is_full(receiver, inbox) then
+      wait on net until not messenger.is_full(receiver, inbox) for timeout;
+      check(not messenger.is_full(receiver, inbox), full_inbox_error);
     end if;
 
-    messenger.send(message.sender, receiver, message.request_id, message.payload.all, receipt);
+    messenger.send(message.sender, receiver, inbox, message.request_id, message.payload.all, receipt);
     message.id := receipt.id;
+    message.receiver := receiver;
     notify(net);
 
     if not keep_message then
@@ -426,7 +427,7 @@ package body com_deprecated_pkg is
   begin
     deprecated("receive_reply() with request ID input. Use send receipt or message input instead");
     delete(message);
-    wait_for_reply_stash_message(net, receiver, request_id, status, timeout);
+    wait_for_reply_stash_message(net, receiver, inbox, request_id, status, timeout);
     if status = ok then
       message := get_reply_stash_message(receiver);
     else
@@ -478,7 +479,7 @@ package body com_deprecated_pkg is
     variable message : message_ptr_t;
   begin
     deprecated("receive_reply() with status output. Use without or wait_for_reply() if accepting timeout");
-    wait_for_reply_stash_message(net, receiver, receipt.id, status, timeout);
+    wait_for_reply_stash_message(net, receiver, inbox, receipt.id, status, timeout);
     check(no_error_status(status), status);
     if status = ok then
       message := get_reply_stash_message(receiver);

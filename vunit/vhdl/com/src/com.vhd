@@ -101,87 +101,45 @@ package body com_pkg is
   end procedure delete;
 
   -----------------------------------------------------------------------------
-  -- Receive related subprograms
+  -- Primary send and receive related subprograms
   -----------------------------------------------------------------------------
-  procedure wait_for_message (
-    signal net               : in  network_t;
-    constant receiver        : in  actor_t;
-    variable status          : out com_status_t;
-    constant timeout : in  time := max_timeout_c) is
+  procedure send (
+    signal net            : inout network_t;
+    constant receiver     : in    actor_t;
+    constant mailbox_name : in mailbox_name_t;
+    variable message      : inout message_ptr_t;
+    constant timeout      : in    time    := max_timeout_c;
+    constant keep_message : in    boolean := true) is
+    variable receipt : receipt_t;
   begin
-    check(not messenger.deferred(receiver), deferred_receiver_error);
+    check(message /= null, null_message_error);
+    check(not messenger.unknown_actor(receiver), unknown_receiver_error);
 
-    status := ok;
-    if not messenger.has_messages(receiver) then
-      wait on net until messenger.has_messages(receiver) for timeout;
-      if not messenger.has_messages(receiver) then
-        status := work.com_types_pkg.timeout;
-      end if;
-    end if;
-  end procedure wait_for_message;
-
-  procedure wait_for_reply (
-    signal net               : inout network_t;
-    variable request  : inout message_ptr_t;
-    variable status          : out   com_status_t;
-    constant timeout : in    time := max_timeout_c) is
-  begin
-    wait_for_reply_stash_message(net, request.sender, request.id, status, timeout);
-  end;
-
-  procedure wait_for_reply (
-    signal net               : inout network_t;
-    constant receiver        : in    actor_t;
-    constant receipt  : in receipt_t;
-    variable status          : out   com_status_t;
-    constant timeout : in    time := max_timeout_c) is
-  begin
-    wait_for_reply_stash_message(net, receiver, receipt.id, status, timeout);
-  end;
-
-  impure function has_message (actor : actor_t) return boolean is
-  begin
-    return messenger.has_messages(actor);
-  end function has_message;
-
-  impure function get_message (receiver : actor_t; delete_from_inbox : boolean := true) return message_ptr_t is
-    variable message : message_ptr_t;
-  begin
-    check(messenger.has_messages(receiver), null_message_error);
-
-    message            := new message_t;
-    message.status     := ok;
-    message.id         := messenger.get_first_message_id(receiver);
-    message.request_id := messenger.get_first_message_request_id(receiver);
-    message.sender     := messenger.get_first_message_sender(receiver);
-    write(message.payload, messenger.get_first_message_payload(receiver));
-    if delete_from_inbox then
-      messenger.delete_first_envelope(receiver);
+    if messenger.is_full(receiver, mailbox_name) then
+      wait on net until not messenger.is_full(receiver, mailbox_name) for timeout;
+      check(not messenger.is_full(receiver, mailbox_name), full_inbox_error);
     end if;
 
-    return message;
-  end function get_message;
+    messenger.send(message.sender, receiver, mailbox_name, message.request_id, message.payload.all, receipt);
+    message.id := receipt.id;
+    message.receiver := receiver;
+    notify(net);
 
-  impure function get_reply (
-    receiver : actor_t;
-    receipt : receipt_t;
-    delete_from_inbox : boolean := true)
-    return message_ptr_t is
-  begin
-    check(messenger.get_reply_stash_message_request_id(receiver) = receipt.id, unknown_request_id_error);
-
-    return get_reply_stash_message(receiver, delete_from_inbox);
+    if not keep_message then
+      delete(message);
+    end if;
   end;
 
-  procedure get_reply (
-    variable request           : inout message_ptr_t;
-    variable reply             : inout message_ptr_t;
-    constant delete_from_inbox : in    boolean := true) is
+  procedure send (
+    signal net            : inout network_t;
+    constant receiver     : in    actor_t;
+    variable message      : inout message_ptr_t;
+    constant timeout      : in    time    := max_timeout_c;
+    constant keep_message : in    boolean := true) is
+    variable receipt : receipt_t;
   begin
-    check(messenger.get_reply_stash_message_request_id(request.sender) = request.id, unknown_request_id_error);
-    reply := get_reply_stash_message(request.sender, delete_from_inbox);
+    send(net, receiver, inbox, message, timeout, keep_message);
   end;
-
 
   procedure receive (
     signal net        : inout network_t;
@@ -195,117 +153,88 @@ package body com_pkg is
     wait_for_message(net, receiver, status, timeout);
     check(no_error_status(status), status);
     if status = ok then
-      started_with_full_inbox := messenger.inbox_is_full(receiver);
+      started_with_full_inbox := messenger.is_full(receiver, inbox);
       message                 := get_message(receiver);
       if started_with_full_inbox then
         notify(net);
       end if;
     else
       message        := new message_t;
+      message.receiver := receiver;
       message.status := status;
     end if;
   end;
 
-  procedure receive_reply (
-    signal net          : inout network_t;
-    constant receiver   : in    actor_t;
-    constant receipt    : in    receipt_t;
-    variable message    : inout message_ptr_t;
-    constant timeout    : in    time := max_timeout_c) is
-    variable status : com_status_t;
-  begin
-    delete(message);
-    wait_for_reply_stash_message(net, receiver, receipt.id, status, timeout);
-    check(no_error_status(status), status);
-    if status = ok then
-      message := get_reply_stash_message(receiver);
-    else
-      message        := new message_t;
-      message.status := status;
-    end if;
-  end;
-
-  procedure receive_reply (
-    signal net          : inout network_t;
-    variable request    : inout    message_ptr_t;
-    variable message    : inout message_ptr_t;
-    constant timeout    : in    time := max_timeout_c) is
-    constant receipt : receipt_t := (status => ok, id => request.id);
-  begin
-    receive_reply(net, request.sender, receipt, message, timeout);
-  end;
-
-  procedure receive_reply (
+  procedure reply (
     signal net            : inout network_t;
-    constant receiver     : in    actor_t;
-    constant receipt    : in    receipt_t;
-    variable positive_ack : out   boolean;
-    constant timeout      : in    time := max_timeout_c) is
-    variable status       : com_status_t;
-    variable message : message_ptr_t;
-  begin
-    wait_for_reply_stash_message(net, receiver, receipt.id, status, timeout);
-    check(no_error_status(status), status);
-    if status = ok then
-      message := get_reply_stash_message(receiver);
-      status := message.status;
-      positive_ack := decode(message.payload.all);
-      delete(message);
-    else
-      positive_ack := false;
-    end if;
-  end;
-
-  procedure receive_reply (
-    signal net            : inout network_t;
-    variable request    : inout    message_ptr_t;
-    variable positive_ack : out   boolean;
-    constant timeout      : in    time := max_timeout_c) is
-    constant receipt : receipt_t := (status => ok, id => request.id);
-  begin
-    receive_reply(net, request.sender, receipt, positive_ack, timeout);
-  end;
-
-  -----------------------------------------------------------------------------
-  -- Subscriptions
-  -----------------------------------------------------------------------------
-  procedure subscribe (subscriber : actor_t; publisher : actor_t) is
-  begin
-    messenger.subscribe(subscriber, publisher);
-  end procedure subscribe;
-
-  procedure unsubscribe (subscriber : actor_t; publisher : actor_t) is
-  begin
-    messenger.unsubscribe(subscriber, publisher);
-  end procedure unsubscribe;
-
-  -----------------------------------------------------------------------------
-  -- Send related subprograms
-  -----------------------------------------------------------------------------
-  procedure send (
-    signal net            : inout network_t;
-    constant receiver     : in    actor_t;
+    variable request   : inout    message_ptr_t;
     variable message      : inout message_ptr_t;
     constant timeout      : in    time    := max_timeout_c;
     constant keep_message : in    boolean := true) is
-    variable receipt : receipt_t;
+  begin
+    check(request.id /= no_message_id_c, reply_missing_request_id_error);
+    message.request_id := request.id;
+    message.sender := request.receiver;
+
+    if request.sender /= null_actor_c then
+      send(net, request.sender, inbox, message, timeout, keep_message);
+    else
+      send(net, request.receiver, outbox, message, timeout, keep_message);
+    end if;
+  end;
+
+  procedure receive_reply (
+    signal net          : inout network_t;
+    variable request    : inout    message_ptr_t;
+    variable message    : inout message_ptr_t;
+    constant timeout    : in    time := max_timeout_c) is
+    variable status : com_status_t;
+    variable source_actor : actor_t;
+    variable mailbox : mailbox_name_t;
+  begin
+    delete(message);
+
+    source_actor := request.sender when request.sender /= null_actor_c else request.receiver;
+    mailbox := inbox when request.sender /= null_actor_c else outbox;
+
+    wait_for_reply_stash_message(net, source_actor, mailbox, request.id, status, timeout);
+    check(no_error_status(status), status);
+    if status = ok then
+      message := get_reply_stash_message(source_actor);
+    else
+      message        := new message_t;
+      message.receiver := request.sender;
+      message.status := status;
+    end if;
+  end;
+
+  procedure publish (
+    signal net            : inout network_t;
+    constant sender : in    actor_t;
+    variable message      : inout message_ptr_t;
+    constant timeout      : in    time    := max_timeout_c;
+    constant keep_message : in    boolean := true) is
   begin
     check(message /= null, null_message_error);
-    check(not messenger.unknown_actor(receiver), unknown_receiver_error);
+    message.sender := sender;
+    message.receiver := null_actor_c;
 
-    if messenger.inbox_is_full(receiver) then
-      wait on net until not messenger.inbox_is_full(receiver) for timeout;
-      check(not messenger.inbox_is_full(receiver), full_inbox_error);
+    if messenger.subscriber_inbox_is_full(message.sender) then
+      wait on net until not messenger.subscriber_inbox_is_full(sender) for timeout;
+      check(not messenger.subscriber_inbox_is_full(message.sender), full_inbox_error);
     end if;
 
-    messenger.send(message.sender, receiver, message.request_id, message.payload.all, receipt);
-    message.id := receipt.id;
+    messenger.publish(message.sender, message.payload.all);
     notify(net);
 
     if not keep_message then
       delete(message);
     end if;
   end;
+
+  -----------------------------------------------------------------------------
+  -- Secondary send and receive related subprograms
+  -----------------------------------------------------------------------------
 
   procedure request (
     signal net               : inout network_t;
@@ -341,38 +270,13 @@ package body com_pkg is
     end if;
   end;
 
-  procedure reply (
-    signal net            : inout network_t;
-    variable request   : inout    message_ptr_t;
-    variable message      : inout message_ptr_t;
-    constant timeout      : in    time    := max_timeout_c;
-    constant keep_message : in    boolean := false) is
-  begin
-    check(request.id /= no_message_id_c, reply_missing_request_id_error);
-    message.request_id := request.id;
-
-    send(net, request.sender, message, timeout, keep_message);
-  end;
-
   procedure publish (
     signal net            : inout network_t;
     variable message      : inout message_ptr_t;
     constant timeout      : in    time    := max_timeout_c;
     constant keep_message : in    boolean := false) is
   begin
-    check(message /= null, null_message_error);
-
-    if messenger.subscriber_inbox_is_full(message.sender) then
-      wait on net until not messenger.subscriber_inbox_is_full(message.sender) for timeout;
-      check(not messenger.subscriber_inbox_is_full(message.sender), full_inbox_error);
-    end if;
-
-    messenger.publish(message.sender, message.payload.all);
-    notify(net);
-
-    if not keep_message then
-      delete(message);
-    end if;
+    publish(net, message.sender, message, timeout, keep_message);
   end;
 
   procedure acknowledge (
@@ -387,6 +291,115 @@ package body com_pkg is
     message := compose(encode(positive_ack), request_id => request.id);
     send(net, request.sender, message, timeout);
   end;
+
+  procedure receive_reply (
+    signal net            : inout network_t;
+    variable request    : inout    message_ptr_t;
+    variable positive_ack : out   boolean;
+    constant timeout      : in    time := max_timeout_c) is
+    constant receipt : receipt_t := (status => ok, id => request.id);
+    variable message : message_ptr_t;
+  begin
+    receive_reply(net, request, message, timeout);
+    positive_ack := decode(message.payload.all);
+    delete(message);
+  end;
+
+  -----------------------------------------------------------------------------
+  -- Low-level subprograms primarily used for handling timeout wihout error
+  -----------------------------------------------------------------------------
+  procedure wait_for_message (
+    signal net               : in  network_t;
+    constant receiver        : in  actor_t;
+    variable status          : out com_status_t;
+    constant timeout : in  time := max_timeout_c) is
+  begin
+    check(not messenger.deferred(receiver), deferred_receiver_error);
+
+    status := ok;
+    if not messenger.has_messages(receiver) then
+      wait on net until messenger.has_messages(receiver) for timeout;
+      if not messenger.has_messages(receiver) then
+        status := work.com_types_pkg.timeout;
+      end if;
+    end if;
+  end procedure wait_for_message;
+
+  procedure wait_for_reply (
+    signal net               : inout network_t;
+    variable request  : inout message_ptr_t;
+    variable status          : out   com_status_t;
+    constant timeout : in    time := max_timeout_c) is
+  begin
+    wait_for_reply_stash_message(net, request.sender, inbox, request.id, status, timeout);
+  end;
+
+  procedure wait_for_reply (
+    signal net               : inout network_t;
+    constant receiver        : in    actor_t;
+    constant receipt  : in receipt_t;
+    variable status          : out   com_status_t;
+    constant timeout : in    time := max_timeout_c) is
+  begin
+    wait_for_reply_stash_message(net, receiver, inbox, receipt.id, status, timeout);
+  end;
+
+  impure function has_message (actor : actor_t) return boolean is
+  begin
+    return messenger.has_messages(actor);
+  end function has_message;
+
+  impure function get_message (receiver : actor_t; delete_from_inbox : boolean := true) return message_ptr_t is
+    variable message : message_ptr_t;
+  begin
+    check(messenger.has_messages(receiver), null_message_error);
+
+    message            := new message_t;
+    message.status     := ok;
+    message.id         := messenger.get_first_message_id(receiver);
+    message.request_id := messenger.get_first_message_request_id(receiver);
+    message.sender     := messenger.get_first_message_sender(receiver);
+    message.receiver   := receiver;
+    write(message.payload, messenger.get_first_message_payload(receiver));
+    if delete_from_inbox then
+      messenger.delete_first_envelope(receiver);
+    end if;
+
+    return message;
+  end function get_message;
+
+  impure function get_reply (
+    receiver : actor_t;
+    receipt : receipt_t;
+    delete_from_inbox : boolean := true)
+    return message_ptr_t is
+  begin
+    check(messenger.get_reply_stash_message_request_id(receiver) = receipt.id, unknown_request_id_error);
+
+    return get_reply_stash_message(receiver, delete_from_inbox);
+  end;
+
+  procedure get_reply (
+    variable request           : inout message_ptr_t;
+    variable reply             : inout message_ptr_t;
+    constant delete_from_inbox : in    boolean := true) is
+  begin
+    check(messenger.get_reply_stash_message_request_id(request.sender) = request.id, unknown_request_id_error);
+    reply := get_reply_stash_message(request.sender, delete_from_inbox);
+  end;
+
+  -----------------------------------------------------------------------------
+  -- Subscriptions
+  -----------------------------------------------------------------------------
+  procedure subscribe (subscriber : actor_t; publisher : actor_t) is
+  begin
+    messenger.subscribe(subscriber, publisher);
+  end procedure subscribe;
+
+  procedure unsubscribe (subscriber : actor_t; publisher : actor_t) is
+  begin
+    messenger.unsubscribe(subscriber, publisher);
+  end procedure unsubscribe;
 
   -----------------------------------------------------------------------------
   -- Misc

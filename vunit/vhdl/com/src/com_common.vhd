@@ -23,6 +23,7 @@ package com_common_pkg is
   procedure wait_for_reply_stash_message (
     signal net               : inout network_t;
     constant receiver        : in    actor_t;
+    constant mailbox_name : in mailbox_name_t := inbox;
     constant request_id      : in    message_id_t;
     variable status          : out   com_status_t;
     constant timeout : in    time := max_timeout_c);
@@ -49,24 +50,28 @@ package body com_common_pkg is
   procedure wait_for_reply_stash_message (
     signal net               : inout network_t;
     constant receiver        : in    actor_t;
+    constant mailbox_name : in mailbox_name_t := inbox;
     constant request_id      : in    message_id_t;
     variable status          : out   com_status_t;
     constant timeout : in    time := max_timeout_c) is
-    variable started_with_full_inbox : boolean;
+    variable started_with_full_inbox : boolean := false;
   begin
     check(not messenger.deferred(receiver), deferred_receiver_error);
 
     status                  := ok;
-    started_with_full_inbox := messenger.inbox_is_full(receiver);
+    if mailbox_name = inbox then
+      started_with_full_inbox := messenger.is_full(receiver, inbox);
+    end if;
+
     if messenger.has_reply_stash_message(receiver, request_id) then
       return;
-    elsif messenger.find_and_stash_reply_message(receiver, request_id) then
+    elsif messenger.find_and_stash_reply_message(receiver, request_id, mailbox_name) then
       if started_with_full_inbox then
         notify(net);
       end if;
       return;
     else
-      wait on net until messenger.find_and_stash_reply_message(receiver, request_id) for timeout;
+      wait on net until messenger.find_and_stash_reply_message(receiver, request_id, mailbox_name) for timeout;
       if not messenger.has_reply_stash_message(receiver, request_id) then
         status := work.com_types_pkg.timeout;
       elsif started_with_full_inbox then
@@ -88,6 +93,7 @@ package body com_common_pkg is
     message.id         := messenger.get_reply_stash_message_id(receiver);
     message.request_id := messenger.get_reply_stash_message_request_id(receiver);
     message.sender     := messenger.get_reply_stash_message_sender(receiver);
+    message.receiver   := receiver;
     write(message.payload, messenger.get_reply_stash_message_payload(receiver));
     if clear_reply_stash then
       messenger.clear_reply_stash(receiver);

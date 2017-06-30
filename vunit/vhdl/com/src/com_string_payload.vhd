@@ -6,6 +6,7 @@
 
 use work.com_types_pkg.all;
 use work.com_pkg.all;
+use work.com_codec_pkg.all;
 
 package com_string_payload_pkg is
   procedure send (
@@ -56,6 +57,18 @@ package com_string_payload_pkg is
     constant sender  : in    actor_t;
     constant payload : in    string := "";
     constant timeout : in    time   := max_timeout_c);
+  procedure receive_reply (
+    signal net          : inout network_t;
+    constant receiver   : in    actor_t;
+    constant receipt    : in    receipt_t;
+    variable message    : inout message_ptr_t;
+    constant timeout    : in    time := max_timeout_c);
+  procedure receive_reply (
+    signal net            : inout network_t;
+    constant receiver     : in    actor_t;
+    constant receipt    : in    receipt_t;
+    variable positive_ack : out   boolean;
+    constant timeout      : in    time := max_timeout_c);
 end package com_string_payload_pkg;
 
 package body com_string_payload_pkg is
@@ -157,5 +170,32 @@ package body com_string_payload_pkg is
   begin
     message := compose(payload, sender);
     publish(net, message, timeout);
+  end;
+
+  procedure receive_reply (
+    signal net          : inout network_t;
+    constant receiver   : in    actor_t;
+    constant receipt    : in    receipt_t;
+    variable message    : inout message_ptr_t;
+    constant timeout    : in    time := max_timeout_c) is
+    variable request : message_ptr_t := new_message;
+  begin
+    request.sender := receiver;
+    request.id := receipt.id;
+    receive_reply(net, request, message, timeout);
+    delete(request);
+  end;
+
+  procedure receive_reply (
+    signal net            : inout network_t;
+    constant receiver     : in    actor_t;
+    constant receipt    : in    receipt_t;
+    variable positive_ack : out   boolean;
+    constant timeout      : in    time := max_timeout_c) is
+    variable message : message_ptr_t;
+  begin
+    receive_reply(net, receiver, receipt, message, timeout);
+    positive_ack := decode(message.payload.all);
+    delete(message);
   end;
 end package body com_string_payload_pkg;
