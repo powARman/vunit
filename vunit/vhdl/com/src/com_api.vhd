@@ -8,15 +8,17 @@
 -- Copyright (c) 2015-2017, Lars Asplund lars.anders.asplund@gmail.com
 
 use work.com_types_pkg.all;
+use work.queue_pkg.all;
 
 package com_pkg is
   signal net : network_t := idle_network;
-
+  alias event is net;
   -----------------------------------------------------------------------------
   -- Handling of actors
   -----------------------------------------------------------------------------
   impure function create (name : string := ""; inbox_size : positive := positive'high) return actor_t;  --
   impure function find (name : string; enable_deferred_creation : boolean := true) return actor_t;
+  impure function name (actor : actor_t) return string;
 
   procedure destroy (actor : inout actor_t);
   procedure reset_messenger;
@@ -24,6 +26,9 @@ package com_pkg is
   impure function num_of_actors return natural;
   impure function num_of_deferred_creations return natural;
   impure function inbox_size (actor : actor_t) return natural;
+  -- Think more about the use cases for this API
+  impure function num_of_messages (actor : actor_t) return natural;
+  procedure resize_inbox (actor : actor_t; new_size : natural);
 
   -----------------------------------------------------------------------------
   -- Message related subprograms
@@ -147,6 +152,7 @@ package com_pkg is
   procedure allow_timeout;
   procedure allow_deprecated;
   procedure deprecated (msg : string);
-
+  procedure push(queue : queue_t; variable value : inout message_ptr_t);
+  impure function pop(queue : queue_t) return message_ptr_t;
 
 end package;

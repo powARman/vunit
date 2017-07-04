@@ -9,9 +9,9 @@ library ieee;
 use ieee.std_logic_1164.all;
 
 use work.axi_pkg.all;
-use work.message_pkg.all;
 use work.queue_pkg.all;
 use work.bus_pkg.all;
+context work.com_context;
 
 entity axi_lite_master is
   generic (
@@ -46,20 +46,19 @@ end entity;
 architecture a of axi_lite_master is
 begin
   main : process
-    variable msg : msg_t;
-    variable reply : reply_t;
-    variable bus_access_type : bus_access_type_t;
+    variable request_msg : message_ptr_t;
+    --TODO: Assumes same length address buses
+    variable bus_request : bus_request_t(address(awaddr'range), data(wdata'range));
+
     variable w_done, aw_done : boolean;
   begin
     loop
-      recv(event, bus_handle.p_inbox, msg, reply);
-      bus_access_type := bus_access_type_t'val(integer'(pop(msg.data)));
+      receive(event, bus_handle.p_actor, request_msg);
+      decode(request_msg, bus_request);
 
-      case bus_access_type is
+      case bus_request.access_type is
         when read_access =>
-          assert reply /= null_reply;
-
-          araddr <= pop_std_ulogic_vector(msg.data);
+          araddr <= bus_request.address;
           arvalid <= '1';
           wait until (arvalid and arready) = '1' and rising_edge(aclk);
           arvalid <= '0';
@@ -68,14 +67,11 @@ begin
           wait until (rvalid and rready) = '1' and rising_edge(aclk);
           assert rresp = axi_resp_ok report "Got non-OKAY rresp";
           rready <= '0';
-          push_std_ulogic_vector(reply.data, rdata);
-          send_reply(event, reply);
+          reply(event, request_msg, encode(rdata));
 
         when write_access =>
-          assert reply = null_reply;
-
-          awaddr <= pop_std_ulogic_vector(msg.data);
-          wdata <= pop_std_ulogic_vector(msg.data);
+          awaddr <= bus_request.address;
+          wdata <= bus_request.data;
           wstb <= (wstb'range => '1');
 
           wvalid <= '1';
@@ -101,9 +97,7 @@ begin
           wait until (bvalid and bready) = '1' and rising_edge(aclk);
           bready <= '0';
           assert bresp = axi_resp_ok report "Got non-OKAY bresp";
-
       end case;
-
     end loop;
   end process;
 end architecture;

@@ -12,7 +12,7 @@ use work.axi_pkg.all;
 use work.axi_private_pkg.all;
 use work.queue_pkg.all;
 use work.memory_pkg.all;
-use work.message_pkg.all;
+context work.com_context;
 
 entity axi_write_slave is
   generic (

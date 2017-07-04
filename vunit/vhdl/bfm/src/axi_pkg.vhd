@@ -8,7 +8,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 
 use work.queue_pkg.all;
-use work.message_pkg.all;
+context work.com_context;
 
 package axi_pkg is
   subtype axi_resp_t is std_logic_vector(1 downto 0);
@@ -23,10 +23,10 @@ package axi_pkg is
   subtype axi4_size_t is std_logic_vector(2 downto 0);
 
   type axi_slave_t is record
-    p_inbox : inbox_t;
+    p_actor : actor_t;
   end record;
 
-  impure function new_axi_slave return axi_slave_t;
+  impure function new_axi_slave (name : string := "") return axi_slave_t;
 
   -- Disables failure on internal errors that are instead pushed to an error queue
   -- Used for testing the BFM error messages
@@ -65,67 +65,53 @@ package axi_pkg is
 end package;
 
 package body axi_pkg is
-  impure function new_axi_slave return axi_slave_t is
+  impure function new_axi_slave (name : string := "") return axi_slave_t is
   begin
-    return (p_inbox => new_inbox);
+    return (p_actor => create(name));
   end;
 
   procedure disable_fail_on_error(signal event : inout event_t; axi_slave : axi_slave_t; variable error_queue : inout queue_t) is
-    variable msg : msg_t;
-    variable reply : reply_t;
+    variable request_msg, reply_msg : message_ptr_t;
   begin
-    msg := allocate;
-    push(msg.data, axi_message_type_t'pos(msg_disable_fail_on_error));
-    send(event, axi_slave.p_inbox, msg, reply);
-    recv_reply(event, reply);
-    error_queue := pop_queue_ref(reply.data);
-    recycle(reply);
+    request_msg := compose((1 => character'val(axi_message_type_t'pos(msg_disable_fail_on_error))));
+    request(event, axi_slave.p_actor, request_msg, reply_msg);
+    error_queue := decode(reply_msg.payload.all);
+    delete(reply_msg);
   end;
 
   procedure set_address_channel_fifo_depth(signal event : inout event_t; axi_slave : axi_slave_t; depth : positive) is
-    variable msg : msg_t;
-    variable reply : reply_t;
+    variable request_msg : message_ptr_t;
+    variable ack : boolean;
   begin
-    msg := allocate;
-    push(msg.data, axi_message_type_t'pos(msg_set_address_channel_fifo_depth));
-    push(msg.data, depth);
-    send(event, axi_slave.p_inbox, msg, reply);
-    recv_reply(event, reply);
-    recycle(reply);
+    request_msg := compose(character'val(axi_message_type_t'pos(msg_set_address_channel_fifo_depth)) & encode(depth));
+    request(event, axi_slave.p_actor, request_msg, ack);
+    assert ack report "Failed on disable_fail_on_error command";
   end;
 
   procedure set_write_response_fifo_depth(signal event : inout event_t; axi_slave : axi_slave_t; depth : positive) is
-    variable msg : msg_t;
-    variable reply : reply_t;
+    variable request_msg : message_ptr_t;
+    variable ack : boolean;
   begin
-    msg := allocate;
-    push(msg.data, axi_message_type_t'pos(msg_set_write_response_fifo_depth));
-    push(msg.data, depth);
-    send(event, axi_slave.p_inbox, msg, reply);
-    recv_reply(event, reply);
-    recycle(reply);
+    request_msg := compose(character'val(axi_message_type_t'pos(msg_set_write_response_fifo_depth)) & encode(depth));
+    request(event, axi_slave.p_actor, request_msg, ack);
+    assert ack report "Failed on set_write_response_fifo_depth command";
   end;
 
   procedure set_address_channel_stall_probability(signal event : inout event_t; axi_slave : axi_slave_t; probability : real) is
-    variable msg : msg_t;
-    variable reply : reply_t;
+    variable request_msg : message_ptr_t;
+    variable ack : boolean;
   begin
-    msg := allocate;
-    push(msg.data, axi_message_type_t'pos(msg_set_address_channel_stall_probability));
-    push_real(msg.data, probability);
-    send(event, axi_slave.p_inbox, msg, reply);
-    recv_reply(event, reply);
-    recycle(reply);
+    request_msg := compose(character'val(axi_message_type_t'pos(msg_set_address_channel_stall_probability)) & encode(probability));
+    request(event, axi_slave.p_actor, request_msg, ack);
+    assert ack report "Failed on set_address_channel_stall_probability command";
   end;
 
   procedure enable_well_behaved_check(signal event : inout event_t; axi_slave : axi_slave_t) is
-    variable msg : msg_t;
-    variable reply : reply_t;
+    variable request_msg : message_ptr_t;
+    variable ack : boolean;
   begin
-    msg := allocate;
-    push(msg.data, axi_message_type_t'pos(msg_enable_well_behaved_check));
-    send(event, axi_slave.p_inbox, msg, reply);
-    recv_reply(event, reply);
-    recycle(reply);
+    request_msg := compose((1 => character'val(axi_message_type_t'pos(msg_enable_well_behaved_check))));
+    request(event, axi_slave.p_actor, request_msg, ack);
+    assert ack report "Failed on msg_enable_well_behaved_check command";
   end;
 end package body;

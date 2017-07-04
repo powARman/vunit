@@ -9,6 +9,8 @@
 
 library vunit_lib;
 context vunit_lib.vunit_context;
+use work.queue_pkg.all;
+use work.integer_vector_ptr_pkg.all;
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -184,6 +186,14 @@ package com_codec_pkg is
   function decode (
     constant code : string)
     return float;
+
+  -----------------------------------------------------------------------------
+  -- VUnit types
+  -----------------------------------------------------------------------------
+  function encode(data : queue_t) return string;
+  function decode(code : string) return queue_t;
+  function encode(data : integer_vector_ptr_t) return string;
+  function decode(code : string) return integer_vector_ptr_t;
 
   -----------------------------------------------------------------------------
   -- Aliases

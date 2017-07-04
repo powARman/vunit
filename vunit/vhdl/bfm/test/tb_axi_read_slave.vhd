@@ -10,12 +10,12 @@ use ieee.numeric_std.all;
 
 library vunit_lib;
 context vunit_lib.vunit_context;
+context work.com_context;
 
 use work.axi_pkg.all;
 use work.memory_pkg.all;
 use work.integer_vector_ptr_pkg.all;
 use work.queue_pkg.all;
-use work.message_pkg.all;
 use work.random_pkg.all;
 
 library osvvm;

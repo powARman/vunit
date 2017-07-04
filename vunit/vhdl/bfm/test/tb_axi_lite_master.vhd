@@ -10,9 +10,9 @@ use ieee.numeric_std.all;
 
 library vunit_lib;
 context vunit_lib.vunit_context;
+context work.com_context;
 
 use work.axi_pkg.all;
-use work.message_pkg.all;
 use work.queue_pkg.all;
 use work.bus_pkg.all;
 
@@ -55,9 +55,6 @@ architecture a of tb_axi_lite_master is
 begin
 
   main : process
-    variable msg : msg_t;
-    variable reply : bus_reference_t;
-    variable reply_queue : queue_t := allocate;
     variable tmp : std_logic_vector(rdata'range);
     variable rnd : RandomPType;
   begin

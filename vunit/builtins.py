@@ -32,8 +32,8 @@ class Builtins(object):
 
         add("data_types")
         add("message", ["data_types"])
-        add("bfm", ["data_types", "message", "osvvm"])
-        add("com")
+        add("bfm", ["data_types", "com", "osvvm"])
+        add("com", ["data_types"])
         add("osvvm")
         add("random", ["data_types", "osvvm"])
 

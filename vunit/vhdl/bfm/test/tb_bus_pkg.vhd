@@ -10,8 +10,8 @@ use ieee.numeric_std.all;
 
 library vunit_lib;
 context vunit_lib.vunit_context;
+context work.com_context;
 
-use work.message_pkg.all;
 use work.queue_pkg.all;
 use work.bus_pkg.all;
 use work.memory_pkg.all;
@@ -28,18 +28,27 @@ begin
   main : process
     variable alloc : alloc_t;
     variable read_data : std_logic_vector(data_length(bus_handle)-1 downto 0);
+    variable reference : bus_reference_t;
   begin
     test_runner_setup(runner, runner_cfg);
 
     if run("test write_bus") then
-      alloc := allocate(memory, 4, permissions => write_only);
+      alloc := allocate(memory, 12, permissions => write_only);
       set_expected_word(memory, base_address(alloc), x"00112233");
+      set_expected_word(memory, base_address(alloc) + 4, x"00112233");
+      set_expected_word(memory, base_address(alloc) + 8, x"00112233");
       write_bus(event, bus_handle, x"00000000", x"00112233");
+      write_bus(event, bus_handle, x"4", x"00112233");
+      write_bus(event, bus_handle, x"00000008", x"112233");
 
     elsif run("test read_bus") then
-      alloc := allocate(memory, 4, permissions => read_only);
+      alloc := allocate(memory, 8, permissions => read_only);
       write_word(memory, base_address(alloc), x"00112233", ignore_permissions => True);
+      write_word(memory, base_address(alloc) + 4, x"00112233", ignore_permissions => True);
       read_bus(event, bus_handle, x"00000000", read_data);
+      check_equal(read_data, std_logic_vector'(x"00112233"));
+      read_bus(event, bus_handle, x"4", reference);
+      await_read_bus_reply(event, reference, read_data);
       check_equal(read_data, std_logic_vector'(x"00112233"));
 
     elsif run("test check_bus") then
@@ -76,32 +85,31 @@ begin
   end process;
 
   memory_model : process
-    variable msg : msg_t;
-    variable reply : reply_t;
+    variable msg : message_ptr_t;
+    variable reply_msg : message_ptr_t;
     variable bus_access_type : bus_access_type_t;
 
     variable addr  : std_logic_vector(address_length(bus_handle)-1 downto 0);
     variable data  : std_logic_vector(data_length(bus_handle)-1 downto 0);
+
+    variable index : positive;
   begin
     loop
-      recv(event, bus_handle.p_inbox, msg, reply);
-
-      bus_access_type := bus_access_type_t'val(integer'(pop(msg.data)));
-      addr := pop_std_ulogic_vector(msg.data);
+      receive(event, bus_handle.p_actor, msg);
+      index := msg.payload.all'left;
+      bus_access_type := bus_access_type_t'val(character'pos(msg.payload.all(index)));
+      index := index + 1;
+      decode(msg.payload.all, index, addr);
 
       case bus_access_type is
         when read_access =>
-          assert reply /= null_reply;
           data := read_word(memory, to_integer(unsigned(addr)), bytes_per_word => data'length/8);
-          push_std_ulogic_vector(reply.data, data);
-          send_reply(event, reply);
+          reply_msg := compose(encode(data));
+          reply(event, msg, reply_msg);
 
         when write_access =>
-          assert reply = null_reply;
-          data := pop_std_ulogic_vector(msg.data);
-          write_word(memory,
-                     to_integer(unsigned(addr)),
-                     data);
+          decode(msg.payload.all, index, data);
+          write_word(memory, to_integer(unsigned(addr)), data);
       end case;
     end loop;
   end process;

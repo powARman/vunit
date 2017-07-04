@@ -59,6 +59,13 @@ begin
       elsif run("Expected to fail: Test that two actors of the same name cannot be created") then
         actor := create("actor2");
         actor := create("actor2");
+      elsif run("Test that multiple no-name actors can be created") then
+        n_actors := num_of_actors;
+        actor := create;
+        actor2 := create;
+        check(actor.id /= actor2.id, "The two actors must have different identities");
+        check_equal(num_of_actors, n_actors + 2);
+        check_equal(num_of_deferred_creations, 0);
 
       -- Find
       elsif run("Test that a created actor can be found") then
@@ -85,6 +92,11 @@ begin
               "Expected inbox size on actor with deferred creation to be one");
         check(inbox_size(create("actor to be created", 42)) = 42,
               "Expected inbox size on actor with deferred creation to change to given value when created");
+      elsif run("Test that no-name actors can't be found") then
+        actor := create;
+        actor2 := create;
+        check(find("") = null_actor_c, "Must not find a no-name actor");
+        check_equal(num_of_deferred_creations, 0);
 
       -- Destroy
       elsif run("Test that a created actor can be destroyed") then
@@ -137,6 +149,11 @@ begin
         send(net, self, "hello", receipt);
         receive(net, self, message);
         check(message.status = ok, "Expected no receive problems");
+        check_equal(message.payload.all, "hello");
+      elsif run("Test that no-name actors can communicate") then
+        actor    := create;
+        send(net, actor, "hello");
+        receive(net, actor, message);
         check_equal(message.payload.all, "hello");
       elsif run("Test that sending without a receipt works") then
         send(net, self, "hello");
@@ -241,7 +258,7 @@ begin
         start_limited_inbox_subscriber <= true;
         wait for 1 ns;
         publish(net, self, "hello subscribers");
-        publish(net, self, "hello subscribers", 9 ns);
+        publish(net, self, "hello subscribers", 8 ns);
       elsif run("Test that publishing to subscribers with full inboxes results passes if waiting") then
         start_limited_inbox_subscriber <= true;
         wait for 1 ns;

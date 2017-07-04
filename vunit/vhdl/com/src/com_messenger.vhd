@@ -21,6 +21,8 @@ package com_messenger_pkg is
     -----------------------------------------------------------------------------
     impure function create (name : string := ""; inbox_size : positive := positive'high) return actor_t;  --
     impure function find (name : string; enable_deferred_creation : boolean := true) return actor_t;
+    -- TODO: Add test case
+    impure function name (actor : actor_t) return string;
 
     procedure destroy (actor : inout actor_t);
     procedure reset_messenger;
@@ -30,7 +32,9 @@ package com_messenger_pkg is
     impure function unknown_actor (actor : actor_t) return boolean;
     impure function deferred (actor      : actor_t) return boolean;
     impure function is_full (actor : actor_t; mailbox_name : mailbox_name_t) return boolean;
+    impure function num_of_messages (actor : actor_t; mailbox_name : mailbox_name_t) return natural;
     impure function inbox_size (actor    : actor_t) return natural;  --
+    procedure resize_inbox (actor : actor_t; new_size : natural);
     impure function subscriber_inbox_is_full (publisher : actor_t) return boolean;
 
     -----------------------------------------------------------------------------
@@ -220,17 +224,25 @@ package body com_messenger_pkg is
   impure function find (name : string; enable_deferred_creation : boolean := true) return actor_t is
     constant actor : actor_t := find_actor(name);
   begin
-    if (actor = null_actor_c) and enable_deferred_creation then
+    if name = "" then
+      return null_actor_c;
+    elsif (actor = null_actor_c) and enable_deferred_creation then
       return create_actor(name, true, 1);
     else
       return actor;
     end if;
   end;
 
+  impure function name (actor : actor_t) return string is
+  begin
+    return actors(actor.id).name.all;
+  end;
+
+
   impure function create (name : string := ""; inbox_size : positive := positive'high) return actor_t is
     variable actor : actor_t := find_actor(name);
   begin
-    if actor = null_actor_c then
+    if (actor = null_actor_c) or (name = "") then
       actor := create_actor(name, false, inbox_size);
     elsif actors(actor.id).deferred_creation then
       actors(actor.id).deferred_creation   := false;
@@ -370,6 +382,23 @@ package body com_messenger_pkg is
       return actors(actor.id).outbox.num_of_messages >= actors(actor.id).outbox.size;
     end if;
   end function;
+
+  impure function num_of_messages (actor : actor_t; mailbox_name : mailbox_name_t) return natural is
+    variable n : natural;
+  begin
+    if mailbox_name = inbox then
+      n := actors(actor.id).inbox.num_of_messages;
+      return actors(actor.id).inbox.num_of_messages;
+    else
+      return actors(actor.id).outbox.num_of_messages;
+    end if;
+  end function;
+
+  procedure resize_inbox (actor : actor_t; new_size : natural) is
+  begin
+    check(num_of_messages(actor, inbox) <= new_size, insufficient_size_error);
+    actors(actor.id).inbox.size := new_size;
+  end;
 
   impure function subscriber_inbox_is_full (publisher : actor_t) return boolean is
     variable item   : subscriber_item_ptr_t := actors(publisher.id).subscribers;

@@ -10,6 +10,7 @@
 -- real access type. This is achieved by letting the actual value be a handle
 -- into a singleton datastructure of integer vector access types.
 --
+
 package integer_vector_ptr_pkg is
   subtype index_t is integer range -1 to integer'high;
   type integer_vector_ptr_t is record
@@ -26,6 +27,7 @@ package integer_vector_ptr_pkg is
   impure function get(ptr : integer_vector_ptr_t; index : integer) return integer;
   procedure reallocate(ptr : integer_vector_ptr_t; length : natural);
   procedure resize(ptr : integer_vector_ptr_t; length : natural; drop : natural := 0; value : integer := 0);
+
 end package;
 
 package body integer_vector_ptr_pkg is
@@ -159,4 +161,5 @@ package body integer_vector_ptr_pkg is
   begin
     integer_vector_ptr_storage.resize(ptr, length, drop, value);
   end procedure;
+
 end package body;

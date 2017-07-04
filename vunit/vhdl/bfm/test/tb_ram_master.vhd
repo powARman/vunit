@@ -10,8 +10,8 @@ use ieee.numeric_std.all;
 
 library vunit_lib;
 context vunit_lib.vunit_context;
+context work.com_context;
 
-use work.message_pkg.all;
 use work.queue_pkg.all;
 use work.bus_pkg.all;
 
@@ -36,8 +36,8 @@ architecture a of tb_ram_master is
 begin
 
   main : process
-    variable reply : bus_reference_t;
-    variable reply_queue : queue_t := allocate;
+    variable reference : bus_reference_t;
+    variable reference_queue : queue_t := allocate;
     variable tmp : std_logic_vector(rdata'range);
   begin
     test_runner_setup(runner, runner_cfg);
@@ -53,13 +53,13 @@ begin
 
     elsif run("Test read back to back") then
       for i in 1 to num_back_to_back_reads loop
-        read_bus(event, bus_handle, std_logic_vector(to_unsigned(i, addr'length)), reply);
-        push(reply_queue, reply);
+        read_bus(event, bus_handle, std_logic_vector(to_unsigned(i, addr'length)), reference);
+        push(reference_queue, reference);
       end loop;
 
       for i in 1 to num_back_to_back_reads loop
-        reply := pop(reply_queue);
-        await_read_bus_reply(event, reply, tmp);
+        reference := pop(reference_queue);
+        await_read_bus_reply(event, reference, tmp);
         check_equal(tmp, std_logic_vector(to_unsigned(111*i, tmp'length)), "read data");
       end loop;
     end if;

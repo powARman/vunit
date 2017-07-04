@@ -9,9 +9,9 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-use work.message_pkg.all;
 use work.queue_pkg.all;
 use work.bus_pkg.all;
+context work.com_context;
 
 entity ram_master is
   generic (
@@ -30,42 +30,34 @@ end entity;
 
 architecture a of ram_master is
   signal rd_pipe : std_logic_vector(0 to latency-1);
-  constant reply_queue : queue_t := allocate;
+  constant request_queue : queue_t := allocate;
 begin
-
   main : process
-    variable msg : msg_t;
-    variable reply : reply_t;
-    variable bus_access_type : bus_access_type_t;
+    variable request_msg : message_ptr_t;
+    variable bus_request : bus_request_t(address(addr'range), data(wdata'range));
   begin
-    loop
-      recv(event, bus_handle.p_inbox, msg, reply);
+    receive(event, bus_handle.p_actor, request_msg);
+    decode(request_msg, bus_request);
 
-      bus_access_type := bus_access_type_t'val(integer'(pop(msg.data)));
-      addr <= pop_std_ulogic_vector(msg.data);
+    addr <= bus_request.address;
 
-      case bus_access_type is
-        when read_access =>
-          assert reply /= null_reply;
-          push(reply_queue, reply);
-          reply := null_reply;
-          rd <= '1';
-          wait until rd = '1' and rising_edge(clk);
-          rd <= '0';
+    case bus_request.access_type is
+      when read_access =>
+        push(request_queue, request_msg);
+        rd <= '1';
+        wait until rd = '1' and rising_edge(clk);
+        rd <= '0';
 
-        when write_access =>
-          assert reply = null_reply;
-          wr <= '1';
-          wdata <= pop_std_ulogic_vector(msg.data);
-          wait until wr = '1' and rising_edge(clk);
-          wr <= '0';
-      end case;
-
-    end loop;
+      when write_access =>
+        wr <= '1';
+        wdata <= bus_request.data;
+        wait until wr = '1' and rising_edge(clk);
+        wr <= '0';
+    end case;
   end process;
 
   read_return : process
-    variable reply : reply_t;
+    variable request_msg : message_ptr_t;
   begin
     wait until rising_edge(clk);
     rd_pipe(rd_pipe'high) <= rd;
@@ -74,9 +66,9 @@ begin
     end loop;
 
     if rd_pipe(0) = '1' then
-      reply := pop(reply_queue);
-      push_std_ulogic_vector(reply.data, rdata);
-      send_reply(event, reply);
+      request_msg := pop(request_queue);
+      reply(event, request_msg, encode(rdata));
+      delete(request_msg);
     end if;
   end process;
 end architecture;

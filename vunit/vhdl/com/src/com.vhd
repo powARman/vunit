@@ -30,6 +30,11 @@ package body com_pkg is
     return messenger.find(name, enable_deferred_creation);
   end;
 
+  impure function name (actor : actor_t) return string is
+  begin
+    return messenger.name(actor);
+  end;
+
   procedure destroy (actor : inout actor_t) is
   begin
     messenger.destroy(actor);
@@ -55,6 +60,16 @@ package body com_pkg is
   impure function inbox_size (actor : actor_t) return natural is
   begin
     return messenger.inbox_size(actor);
+  end;
+
+  impure function num_of_messages (actor : actor_t) return natural is
+  begin
+    return messenger.num_of_messages(actor, inbox);
+  end;
+
+  procedure resize_inbox (actor : actor_t; new_size : natural) is
+  begin
+    messenger.resize_inbox(actor, new_size);
   end;
 
   -----------------------------------------------------------------------------
@@ -87,6 +102,7 @@ package body com_pkg is
     dst := new message_t;
     dst.id := src.id;
     dst.status := src.status;
+    dst.receiver := src.receiver;
     dst.sender := src.sender;
     dst.request_id := src.request_id;
     write(dst.payload, src.payload.all);
@@ -284,12 +300,10 @@ package body com_pkg is
     variable request   : inout    message_ptr_t;
     constant positive_ack : in    boolean := true;
     constant timeout      : in    time    := max_timeout_c) is
-    variable receipt      : receipt_t;
     variable message : message_ptr_t;
   begin
-    check(request.id /= no_message_id_c, reply_missing_request_id_error);
-    message := compose(encode(positive_ack), request_id => request.id);
-    send(net, request.sender, message, timeout);
+    message := compose(encode(positive_ack));
+    reply(net, request, message, timeout, keep_message => false);
   end;
 
   procedure receive_reply (
@@ -419,4 +433,28 @@ package body com_pkg is
     messenger.deprecated(msg);
   end;
 
+  procedure push(queue : queue_t; variable value : inout message_ptr_t) is
+  begin
+    push(queue, value.id);
+    push(queue, com_status_t'pos(value.status));
+    push(queue, value.sender.id);
+    push(queue, value.receiver.id);
+    push(queue, value.request_id);
+    push_string(queue, value.payload.all);
+  end;
+
+  impure function pop(queue : queue_t) return message_ptr_t is
+    variable ret_val : message_ptr_t := new_message;
+    variable pos : integer;
+  begin
+    ret_val.id := pop(queue);
+    pos := pop(queue);
+    ret_val.status := com_status_t'val(pos);
+    ret_val.sender.id := pop(queue);
+    ret_val.receiver.id := pop(queue);
+    ret_val.request_id := pop(queue);
+    write(ret_val.payload, pop_string(queue));
+
+    return ret_val;
+  end;
 end package body com_pkg;

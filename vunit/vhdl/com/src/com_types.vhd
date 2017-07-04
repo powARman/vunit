@@ -26,6 +26,7 @@ package com_types_pkg is
                         reply_missing_request_id_error,
                         unknown_request_id_error,
                         deprecated_interface_error,
+                        insufficient_size_error,
                         duplicate_actor_name_error);
 
   subtype com_error_t is com_status_t range timeout to duplicate_actor_name_error;
@@ -55,6 +56,9 @@ package com_types_pkg is
   subtype network_t is std_logic;
   constant network_event : std_logic := '1';
   constant idle_network  : std_logic := 'Z';
+
+  alias event_t is network_t;
+  alias no_event is idle_network;
 
   constant max_timeout_c : time := 1 hr;  -- ModelSim can't handle time'high
 end package;

@@ -10,10 +10,12 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use std.textio.all;
+
 use work.axi_pkg.all;
 use work.queue_pkg.all;
-use work.message_pkg.all;
 use work.fail_pkg.all;
+context work.com_context;
 
 library osvvm;
 use osvvm.RandomPkg.all;
@@ -30,7 +32,7 @@ package axi_private_pkg is
 
   type axi_slave_private_t is protected
     procedure init(axi_slave : axi_slave_t; data : std_logic_vector);
-    impure function get_inbox return inbox_t;
+    impure function get_actor return actor_t;
 
     procedure set_address_channel_fifo_depth(depth : positive);
     procedure set_write_response_fifo_depth(depth : positive);
@@ -97,9 +99,9 @@ package body axi_private_pkg is
       set_address_channel_stall_probability(0.0);
     end;
 
-    impure function get_inbox return inbox_t is
+    impure function get_actor return actor_t is
     begin
-      return p_axi_slave.p_inbox;
+      return p_axi_slave.p_actor;
     end;
 
     procedure set_address_channel_fifo_depth(depth : positive) is
@@ -283,39 +285,43 @@ package body axi_private_pkg is
 
   procedure main_loop(variable self : inout axi_slave_private_t;
                       signal event : inout event_t) is
-    variable msg : msg_t;
-    variable reply : reply_t;
+    variable request_msg : message_ptr_t;
     variable msg_type : axi_message_type_t;
+    variable index : positive;
+    variable depth : positive;
+    variable probability : real;
   begin
     loop
-      recv(event, self.get_inbox, msg, reply);
-      msg_type := axi_message_type_t'val(integer'(pop(msg.data)));
+      receive(event, self.get_actor, request_msg);
+      index := request_msg.payload.all'left;
+      msg_type := axi_message_type_t'val(character'pos(request_msg.payload.all(index)));
+      index := index + 1;
 
       case msg_type is
         when msg_disable_fail_on_error =>
           self.set_error_queue(allocate);
-          push_queue_ref(reply.data, self.get_error_queue);
-          send_reply(event, reply);
+          reply(event, request_msg, encode(self.get_error_queue));
 
         when msg_set_address_channel_fifo_depth =>
-          self.set_address_channel_fifo_depth(pop(msg.data));
-          send_reply(event, reply);
+          decode(request_msg.payload.all, index, depth);
+          self.set_address_channel_fifo_depth(depth);
+          acknowledge(event, request_msg, true);
 
         when msg_set_write_response_fifo_depth =>
-          self.set_write_response_fifo_depth(pop(msg.data));
-          send_reply(event, reply);
+          decode(request_msg.payload.all, index, depth);
+          self.set_address_channel_fifo_depth(depth);
+          acknowledge(event, request_msg, true);
 
         when msg_set_address_channel_stall_probability =>
-          self.set_address_channel_stall_probability(pop_real(msg.data));
-          send_reply(event, reply);
+          decode(request_msg.payload.all, index, probability);
+          self.set_address_channel_stall_probability(probability);
+          acknowledge(event, request_msg, true);
 
         when msg_enable_well_behaved_check =>
           self.enable_well_behaved_check;
-          send_reply(event, reply);
+          acknowledge(event, request_msg, true);
 
       end case;
-
-      recycle(msg);
     end loop;
   end;
 

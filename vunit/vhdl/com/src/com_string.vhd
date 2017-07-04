@@ -22,6 +22,8 @@ use ieee.float_pkg.all;
 use std.textio.all;
 
 use work.com_debug_codec_builder_pkg.all;
+use work.queue_pkg.all;
+use work.integer_vector_ptr_pkg.all;
 
 package com_string_pkg is
   function to_detailed_string (
@@ -58,6 +60,12 @@ package com_string_pkg is
     return string;
   function to_string (
     constant data : complex_polar)
+    return string;
+  function to_string (
+    constant data : integer_vector_ptr_t)
+    return string;
+  function to_string (
+    constant data : queue_t)
     return string;
   function to_detailed_string (
     constant data : ieee.numeric_bit.unsigned)
@@ -202,6 +210,20 @@ package body com_string_pkg is
     return string is
   begin
     return create_group(2, to_detailed_string(data.mag), to_detailed_string(data.arg));
+  end;
+
+  function to_string (
+    constant data : integer_vector_ptr_t)
+    return string is
+  begin
+    return create_group(1, to_string(data.index));
+  end;
+
+  function to_string (
+    constant data : queue_t)
+    return string is
+  begin
+    return create_group(2, to_string(data.p_meta), to_string(data.data));
   end;
 
   function to_detailed_string (

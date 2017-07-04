@@ -260,4 +260,5 @@ package body queue_pkg is
     result.data := pop_integer_vector_ptr_ref(queue);
     return result;
   end;
+
 end package body;

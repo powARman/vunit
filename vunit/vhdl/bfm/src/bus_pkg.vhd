@@ -7,26 +7,33 @@
 library ieee;
 use ieee.std_logic_1164.all;
 
-use work.message_pkg.all;
 use work.queue_pkg.all;
 use work.fail_pkg.all;
+context work.com_context;
 
 package bus_pkg is
+  alias bus_reference_t is message_ptr_t;
+
   type bus_t is record
     -- Private
-    p_inbox : inbox_t;
+    p_actor : actor_t;
     p_data_length : natural;
     p_address_length : natural;
     p_fail_log : fail_log_t;
   end record;
 
-  alias bus_reference_t is reply_t;
+  type bus_access_type_t is (read_access, write_access);
+  type bus_request_t is record
+    access_type : bus_access_type_t;
+    address     : std_logic_vector;
+    data        : std_logic_vector;
+  end record bus_request_t;
 
-  impure function new_bus(data_length, address_length : natural) return bus_t;
+  procedure decode (variable request_msg : inout message_ptr_t; variable bus_request : inout bus_request_t);
+
+  impure function new_bus(data_length, address_length : natural; name : string := "") return bus_t;
   impure function data_length(bus_handle : bus_t) return natural;
   impure function address_length(bus_handle : bus_t) return natural;
-
-  type bus_access_type_t is (read_access, write_access);
 
   procedure write_bus(signal event : inout event_t;
                       constant bus_handle : bus_t;
@@ -83,10 +90,21 @@ package bus_pkg is
 end package;
 
 package body bus_pkg is
-
-  impure function new_bus(data_length, address_length : natural) return bus_t is
+  procedure decode (variable request_msg : inout message_ptr_t; variable bus_request : inout bus_request_t) is
+    variable index : positive;
   begin
-    return (p_inbox => new_inbox,
+    index := request_msg.payload.all'left;
+    bus_request.access_type := bus_access_type_t'val(character'pos(request_msg.payload.all(index)));
+    index := index + 1;
+    decode(request_msg.payload.all, index, bus_request.address);
+    if bus_request.access_type = write_access then
+        decode(request_msg.payload.all, index, bus_request.data);
+    end if;
+  end;
+
+  impure function new_bus(data_length, address_length : natural; name : string := "") return bus_t is
+  begin
+    return (p_actor => create(name),
             p_data_length => data_length,
             p_address_length => address_length,
             p_fail_log => new_fail_log);
@@ -106,15 +124,13 @@ package body bus_pkg is
                       constant bus_handle : bus_t;
                       constant address : std_logic_vector;
                       constant data : std_logic_vector) is
-    variable msg : msg_t;
     variable full_data : std_logic_vector(bus_handle.p_data_length-1 downto 0) := (others => '0');
+    variable full_address : std_logic_vector(bus_handle.p_address_length-1 downto 0) := (others => '0');
   begin
-    msg := allocate;
-    push(msg.data, bus_access_type_t'pos(write_access));
-    push_std_ulogic_vector(msg.data, address);
     full_data(data'length-1 downto 0) := data;
-    push_std_ulogic_vector(msg.data, full_data);
-    send(event, bus_handle.p_inbox, msg);
+    full_address(address'length-1 downto 0) := address;
+    send(event, bus_handle.p_actor,
+         character'val(bus_access_type_t'pos(write_access)) & encode(full_address) & encode(full_data));
   end procedure;
 
   procedure check_bus(signal event : inout event_t;
@@ -164,22 +180,23 @@ package body bus_pkg is
                      constant bus_handle : bus_t;
                      constant address : std_logic_vector;
                      variable reference : inout bus_reference_t) is
-    variable msg : msg_t;
+    variable full_address : std_logic_vector(bus_handle.p_address_length-1 downto 0) := (others => '0');
   begin
-    msg := allocate;
-    push(msg.data, bus_access_type_t'pos(read_access));
-    push_std_ulogic_vector(msg.data, address);
-    send(event, bus_handle.p_inbox, msg, reference);
+    full_address(address'length-1 downto 0) := address;
+    reference := compose(character'val(bus_access_type_t'pos(read_access)) & encode(full_address));
+    send(event, bus_handle.p_actor, reference);
   end procedure;
 
   -- Await read bus reply
   procedure await_read_bus_reply(signal event : inout event_t;
                                  variable reference : inout bus_reference_t;
                                  variable data : inout std_logic_vector) is
+    variable msg : message_ptr_t;
   begin
-    recv_reply(event, reference);
-    data := pop_std_ulogic_vector(reference.data)(data'range);
-    recycle(reference);
+    receive_reply(event, reference, msg);
+    data := decode(msg.payload.all);
+    delete(reference);
+    delete(msg);
   end procedure;
 
   -- Blocking read with immediate reply
