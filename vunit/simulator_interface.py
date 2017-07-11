@@ -52,7 +52,7 @@ class SimulatorInterface(object):
         paths = path.split(os.pathsep)
         _, ext = os.path.splitext(executable)
 
-        if (sys.platform == 'win32' or os.name == 'os2') and (ext != '.exe'):
+        if (sys.platform.startswith('win32') or sys.platform.startswith('cygwin')) and (ext == ''):
             executable = executable + '.exe'
 
         result = []
