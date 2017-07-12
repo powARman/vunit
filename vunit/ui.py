@@ -913,6 +913,12 @@ avoid location preprocessing of other functions sharing name with a VUnit log or
         """
         self._builtins.add("random")
 
+    def add_message(self):
+        """
+        Add message utility
+        """
+        self._builtins.add("message")
+
     def add_osvvm(self):
         """
         Add osvvm library

@@ -31,6 +31,7 @@ class Builtins(object):
             self._builtins_adder.add_type(name, getattr(self, "_add_%s" % name), deps)
 
         add("data_types")
+        add("message", ["data_types"])
         add("com")
         add("osvvm")
         add("random", ["data_types", "osvvm"])
@@ -55,6 +56,15 @@ class Builtins(object):
             raise RuntimeError("Random only supports vhdl 2008")
 
         self._vunit_lib.add_source_files(join(VHDL_PATH, "random", "src", "*.vhd"))
+
+    def _add_message(self):
+        """
+        Add message utility library
+        """
+        if self._vhdl_standard != '2008':
+            raise RuntimeError("Message library only supports vhdl 2008")
+
+        self._vunit_lib.add_source_files(join(VHDL_PATH, "message", "src", "*.vhd"))
 
     def _add_com(self, use_debug_codecs=False):
         """
