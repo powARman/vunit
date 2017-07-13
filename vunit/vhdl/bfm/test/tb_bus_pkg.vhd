@@ -85,31 +85,23 @@ begin
   end process;
 
   memory_model : process
-    variable msg : message_ptr_t;
-    variable reply_msg : message_ptr_t;
-    variable bus_access_type : bus_access_type_t;
-
-    variable addr  : std_logic_vector(address_length(bus_handle)-1 downto 0);
+    variable request_msg, reply_msg : msg_t;
+    variable bus_request : bus_request_t(address(address_length(bus_handle)-1 downto 0),
+                                         data(data_length(bus_handle)-1 downto 0));
     variable data  : std_logic_vector(data_length(bus_handle)-1 downto 0);
-
-    variable index : positive;
   begin
     loop
-      receive(event, bus_handle.p_actor, msg);
-      index := msg.payload.all'left;
-      bus_access_type := bus_access_type_t'val(character'pos(msg.payload.all(index)));
-      index := index + 1;
-      decode(msg.payload.all, index, addr);
+      receive(event, bus_handle.p_actor, request_msg);
+      decode(request_msg, bus_request);
 
-      case bus_access_type is
+      case bus_request.access_type is
         when read_access =>
-          data := read_word(memory, to_integer(unsigned(addr)), bytes_per_word => data'length/8);
-          reply_msg := compose(encode(data));
-          reply(event, msg, reply_msg);
-
+          data := read_word(memory, to_integer(unsigned(bus_request.address)), bytes_per_word => data'length/8);
+          reply_msg := create;
+          push_std_ulogic_vector(reply_msg.data, data);
+          reply(event, request_msg, reply_msg);
         when write_access =>
-          decode(msg.payload.all, index, data);
-          write_word(memory, to_integer(unsigned(addr)), data);
+          write_word(memory, to_integer(unsigned(bus_request.address)), bus_request.data);
       end case;
     end loop;
   end process;

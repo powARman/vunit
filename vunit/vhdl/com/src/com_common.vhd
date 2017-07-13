@@ -33,7 +33,7 @@ package com_common_pkg is
     clear_reply_stash : boolean := true)
     return message_ptr_t;
 
-  impure function no_error_status (status : com_status_t) return boolean;
+  impure function no_error_status (status : com_status_t; old_api : boolean := false) return boolean;
 end package com_common_pkg;
 
 package body com_common_pkg is
@@ -102,9 +102,9 @@ package body com_common_pkg is
     return message;
   end function get_reply_stash_message;
 
-  impure function no_error_status (status : com_status_t) return boolean is
+  impure function no_error_status (status : com_status_t; old_api : boolean := false) return boolean is
   begin
-    return (status = ok) or ((status = timeout) and messenger.timeout_is_allowed);
+    return (status = ok) or ((status = timeout) and messenger.timeout_is_allowed and old_api);
   end;
 
 end package body com_common_pkg;

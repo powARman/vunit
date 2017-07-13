@@ -285,36 +285,30 @@ package body axi_private_pkg is
 
   procedure main_loop(variable self : inout axi_slave_private_t;
                       signal event : inout event_t) is
-    variable request_msg : message_ptr_t;
+    variable request_msg, reply_msg : msg_t;
     variable msg_type : axi_message_type_t;
-    variable index : positive;
-    variable depth : positive;
-    variable probability : real;
   begin
     loop
       receive(event, self.get_actor, request_msg);
-      index := request_msg.payload.all'left;
-      msg_type := axi_message_type_t'val(character'pos(request_msg.payload.all(index)));
-      index := index + 1;
+      msg_type := axi_message_type_t'val(integer'(pop(request_msg.data)));
 
+      reply_msg := create;
       case msg_type is
         when msg_disable_fail_on_error =>
           self.set_error_queue(allocate);
-          reply(event, request_msg, encode(self.get_error_queue));
+          push_queue_ref(reply_msg.data, self.get_error_queue);
+          reply(event, request_msg, reply_msg);
 
         when msg_set_address_channel_fifo_depth =>
-          decode(request_msg.payload.all, index, depth);
-          self.set_address_channel_fifo_depth(depth);
+          self.set_address_channel_fifo_depth(pop(request_msg.data));
           acknowledge(event, request_msg, true);
 
         when msg_set_write_response_fifo_depth =>
-          decode(request_msg.payload.all, index, depth);
-          self.set_address_channel_fifo_depth(depth);
+          self.set_write_response_fifo_depth(pop(request_msg.data));
           acknowledge(event, request_msg, true);
 
         when msg_set_address_channel_stall_probability =>
-          decode(request_msg.payload.all, index, probability);
-          self.set_address_channel_stall_probability(probability);
+          self.set_address_channel_stall_probability(pop_real(request_msg.data));
           acknowledge(event, request_msg, true);
 
         when msg_enable_well_behaved_check =>
@@ -322,6 +316,7 @@ package body axi_private_pkg is
           acknowledge(event, request_msg, true);
 
       end case;
+      delete(request_msg);
     end loop;
   end;
 

@@ -21,6 +21,7 @@ use std.textio.all;
 
 package com_deprecated_pkg is
   procedure destroy (actor : inout actor_t; status : out com_status_t);
+
   procedure wait_for_messages (
     signal net               : in  network_t;
     constant receiver        : in  actor_t;
@@ -480,7 +481,7 @@ package body com_deprecated_pkg is
   begin
     deprecated("receive_reply() with status output. Use without or wait_for_reply() if accepting timeout");
     wait_for_reply_stash_message(net, receiver, inbox, receipt.id, status, timeout);
-    check(no_error_status(status), status);
+    check(no_error_status(status, true), status);
     if status = ok then
       message := get_reply_stash_message(receiver);
       status := message.status;

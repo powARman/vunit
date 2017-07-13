@@ -33,7 +33,7 @@ architecture a of ram_master is
   constant request_queue : queue_t := allocate;
 begin
   main : process
-    variable request_msg : message_ptr_t;
+    variable request_msg : msg_t;
     variable bus_request : bus_request_t(address(addr'range), data(wdata'range));
   begin
     receive(event, bus_handle.p_actor, request_msg);
@@ -57,7 +57,7 @@ begin
   end process;
 
   read_return : process
-    variable request_msg : message_ptr_t;
+    variable request_msg, reply_msg : msg_t;
   begin
     wait until rising_edge(clk);
     rd_pipe(rd_pipe'high) <= rd;
@@ -67,7 +67,9 @@ begin
 
     if rd_pipe(0) = '1' then
       request_msg := pop(request_queue);
-      reply(event, request_msg, encode(rdata));
+      reply_msg := create;
+      push_std_ulogic_vector(reply_msg.data, rdata);
+      reply(event, request_msg, reply_msg);
       delete(request_msg);
     end if;
   end process;

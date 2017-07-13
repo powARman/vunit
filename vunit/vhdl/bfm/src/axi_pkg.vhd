@@ -71,46 +71,54 @@ package body axi_pkg is
   end;
 
   procedure disable_fail_on_error(signal event : inout event_t; axi_slave : axi_slave_t; variable error_queue : inout queue_t) is
-    variable request_msg, reply_msg : message_ptr_t;
+    variable request_msg, reply_msg : msg_t;
   begin
-    request_msg := compose((1 => character'val(axi_message_type_t'pos(msg_disable_fail_on_error))));
+    request_msg := create;
+    push(request_msg.data, axi_message_type_t'pos(msg_disable_fail_on_error));
     request(event, axi_slave.p_actor, request_msg, reply_msg);
-    error_queue := decode(reply_msg.payload.all);
+    error_queue := pop_queue_ref(reply_msg.data);
     delete(reply_msg);
   end;
 
   procedure set_address_channel_fifo_depth(signal event : inout event_t; axi_slave : axi_slave_t; depth : positive) is
-    variable request_msg : message_ptr_t;
+    variable request_msg : msg_t;
     variable ack : boolean;
   begin
-    request_msg := compose(character'val(axi_message_type_t'pos(msg_set_address_channel_fifo_depth)) & encode(depth));
+    request_msg := create;
+    push(request_msg.data, axi_message_type_t'pos(msg_set_address_channel_fifo_depth));
+    push(request_msg.data, depth);
     request(event, axi_slave.p_actor, request_msg, ack);
     assert ack report "Failed on disable_fail_on_error command";
   end;
 
   procedure set_write_response_fifo_depth(signal event : inout event_t; axi_slave : axi_slave_t; depth : positive) is
-    variable request_msg : message_ptr_t;
+    variable request_msg : msg_t;
     variable ack : boolean;
   begin
-    request_msg := compose(character'val(axi_message_type_t'pos(msg_set_write_response_fifo_depth)) & encode(depth));
+    request_msg := create;
+    push(request_msg.data, axi_message_type_t'pos(msg_set_write_response_fifo_depth));
+    push(request_msg.data, depth);
     request(event, axi_slave.p_actor, request_msg, ack);
     assert ack report "Failed on set_write_response_fifo_depth command";
   end;
 
   procedure set_address_channel_stall_probability(signal event : inout event_t; axi_slave : axi_slave_t; probability : real) is
-    variable request_msg : message_ptr_t;
+    variable request_msg : msg_t;
     variable ack : boolean;
   begin
-    request_msg := compose(character'val(axi_message_type_t'pos(msg_set_address_channel_stall_probability)) & encode(probability));
+    request_msg := create;
+    push(request_msg.data, axi_message_type_t'pos(msg_set_address_channel_stall_probability));
+    push_real(request_msg.data, probability);
     request(event, axi_slave.p_actor, request_msg, ack);
     assert ack report "Failed on set_address_channel_stall_probability command";
   end;
 
   procedure enable_well_behaved_check(signal event : inout event_t; axi_slave : axi_slave_t) is
-    variable request_msg : message_ptr_t;
+    variable request_msg : msg_t;
     variable ack : boolean;
   begin
-    request_msg := compose((1 => character'val(axi_message_type_t'pos(msg_enable_well_behaved_check))));
+    request_msg := create;
+    push(request_msg.data, axi_message_type_t'pos(msg_enable_well_behaved_check));
     request(event, axi_slave.p_actor, request_msg, ack);
     assert ack report "Failed on msg_enable_well_behaved_check command";
   end;

@@ -46,7 +46,7 @@ end entity;
 architecture a of axi_lite_master is
 begin
   main : process
-    variable request_msg : message_ptr_t;
+    variable request_msg, reply_msg : msg_t;
     --TODO: Assumes same length address buses
     variable bus_request : bus_request_t(address(awaddr'range), data(wdata'range));
 
@@ -67,7 +67,10 @@ begin
           wait until (rvalid and rready) = '1' and rising_edge(aclk);
           assert rresp = axi_resp_ok report "Got non-OKAY rresp";
           rready <= '0';
-          reply(event, request_msg, encode(rdata));
+          reply_msg := create;
+          push_std_ulogic_vector(reply_msg.data, rdata);
+          reply(event, request_msg, reply_msg);
+          delete(request_msg);
 
         when write_access =>
           awaddr <= bus_request.address;

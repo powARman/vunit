@@ -11,6 +11,8 @@ use ieee.std_logic_1164.all;
 
 use std.textio.all;
 
+use work.queue_pkg.all;
+
 package com_types_pkg is
   type com_status_t is (ok,
                         timeout,
@@ -38,15 +40,26 @@ package com_types_pkg is
 
   subtype message_id_t is natural;
   constant no_message_id_c : message_id_t := 0;
+
   type message_t is record
     id         : message_id_t;
     status     : com_status_t;
     sender     : actor_t;
-    receiver     : actor_t;
+    receiver   : actor_t;
     request_id : message_id_t;
     payload    : line;
   end record message_t;
   type message_ptr_t is access message_t;
+
+  subtype msg_data_t is queue_t;
+  type msg_t is record
+    id         : message_id_t;
+    status     : com_status_t;
+    sender     : actor_t;
+    receiver   : actor_t;
+    request_id : message_id_t;
+    data       : msg_data_t;
+  end record msg_t;
 
   type receipt_t is record
     status : com_status_t;
